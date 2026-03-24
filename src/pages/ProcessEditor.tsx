@@ -86,9 +86,9 @@ async function mergeFilesToPdf(docs: DocFile[]): Promise<Uint8Array> {
 }
 
 function detectBaseName(pdfName: string, zipName: string): { baseName: string; mismatch: boolean } {
-  // Try to extract from PDF: PDF-DOC-E001-XXXXXXXXXX.pdf -> E001-XXXXXXXXXX
-  const pdfMatch = pdfName.match(/PDF-DOC-(E\d+-\d+)/i) || pdfName.match(/(E\d+-\d+)/i);
-  const zipMatch = zipName.match(/FACTURA(E\d+-\d+)/i) || zipName.match(/(E\d+-\d+)/i);
+  // Priority: extract from PDF comprobante name (e.g. PDF-DOC-E001-42720603116021.pdf -> E001-42720603116021)
+  const pdfMatch = pdfName.match(/PDF-DOC-(.+?)\.pdf$/i) || pdfName.match(/(E\d+-\w+)/i);
+  const zipMatch = zipName.match(/FACTURA(.+?)\.zip$/i) || zipName.match(/(E\d+-\w+)/i);
 
   const pdfBase = pdfMatch?.[1] || "";
   const zipBase = zipMatch?.[1] || "";
