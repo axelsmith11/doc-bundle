@@ -1,6 +1,16 @@
 import { useRef, useState } from "react";
 import { X, GripVertical, RotateCw, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import FileUploadZone from "./FileUploadZone";
 
@@ -31,8 +41,16 @@ export default function DocumentSection({
   onReorder,
 }: DocumentSectionProps) {
   const [dragging, setDragging] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const touchStartRef = useRef<{ id: string; startY: number; startX: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      onRemoveFile(category, deleteTarget);
+      setDeleteTarget(null);
+    }
+  };
 
   // Desktop drag
   const handleDragStart = (id: string) => setDragging(id);
@@ -130,18 +148,20 @@ export default function DocumentSection({
                 <div className="absolute left-1 top-1 cursor-grab text-muted-foreground/40">
                   <GripVertical className="h-3.5 w-3.5" />
                 </div>
-                <div className="absolute right-1 top-1 flex gap-0.5 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
+                <div className="absolute right-1 top-1 z-10 flex gap-0.5 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100">
                   <button
-                    onClick={() => onRotateFile(category, doc.id)}
-                    className="rounded p-0.5 hover:bg-muted"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); onRotateFile(category, doc.id); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); }}
+                    className="rounded p-1 hover:bg-muted active:scale-95"
                   >
-                    <RotateCw className="h-3 w-3 text-muted-foreground" />
+                    <RotateCw className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
                   <button
-                    onClick={() => onRemoveFile(category, doc.id)}
-                    className="rounded p-0.5 hover:bg-destructive/10"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setDeleteTarget(doc.id); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); }}
+                    className="rounded p-1 hover:bg-destructive/10 active:scale-95"
                   >
-                    <X className="h-3 w-3 text-destructive" />
+                    <X className="h-3.5 w-3.5 text-destructive" />
                   </button>
                 </div>
                 {doc.preview ? (
@@ -172,6 +192,23 @@ export default function DocumentSection({
           showCamera
         />
       </CardContent>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar archivo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. El archivo será eliminado permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
