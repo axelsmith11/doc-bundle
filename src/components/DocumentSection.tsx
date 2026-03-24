@@ -41,8 +41,16 @@ export default function DocumentSection({
   onReorder,
 }: DocumentSectionProps) {
   const [dragging, setDragging] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const touchStartRef = useRef<{ id: string; startY: number; startX: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      onRemoveFile(category, deleteTarget);
+      setDeleteTarget(null);
+    }
+  };
 
   // Desktop drag
   const handleDragStart = (id: string) => setDragging(id);
