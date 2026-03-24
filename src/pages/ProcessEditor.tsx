@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   ArrowLeft,
-  FileArchive,
   Save,
   Download,
   Loader2,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import FileUploadZone from "@/components/FileUploadZone";
 import DocumentSection, { type DocFile } from "@/components/DocumentSection";
+import { useProcessFiles } from "@/hooks/useProcessFiles";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
 
@@ -32,7 +32,6 @@ const SUPPORT_CATEGORIES: { key: CategoryKey; title: string; pdfSuffix: string }
 ];
 
 let fileIdCounter = 0;
-
 function generateFileId() {
   return `file_${++fileIdCounter}_${Date.now()}`;
 }
@@ -47,56 +46,44 @@ async function fileToPreview(file: File): Promise<string | undefined> {
 async function imageToPdfBytes(file: File, rotation: number): Promise<Uint8Array> {
   const arrayBuffer = await file.arrayBuffer();
   const pdfDoc = await PDFDocument.create();
-
   let image;
   if (file.type === "image/png") {
     image = await pdfDoc.embedPng(arrayBuffer);
   } else {
     image = await pdfDoc.embedJpg(arrayBuffer);
   }
-
   const page = pdfDoc.addPage([image.width, image.height]);
   page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
-
   if (rotation) {
     page.setRotation(({ type: 0, angle: rotation }) as any);
   }
-
   return pdfDoc.save();
 }
 
 async function mergeFilesToPdf(docs: DocFile[]): Promise<Uint8Array> {
   const mergedPdf = await PDFDocument.create();
-
   for (const doc of docs) {
     let pdfBytes: ArrayBuffer | Uint8Array;
-
     if (doc.file.type === "application/pdf") {
       pdfBytes = await doc.file.arrayBuffer();
     } else {
       pdfBytes = await imageToPdfBytes(doc.file, doc.rotation);
     }
-
     const sourcePdf = await PDFDocument.load(pdfBytes);
     const pages = await mergedPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
     pages.forEach((page) => mergedPdf.addPage(page));
   }
-
   return mergedPdf.save();
 }
 
 function detectBaseName(pdfName: string, zipName: string): { baseName: string; mismatch: boolean } {
-  // Priority: extract from PDF comprobante name (e.g. PDF-DOC-E001-42720603116021.pdf -> E001-42720603116021)
-  const pdfMatch = pdfName.match(/PDF-DOC-(.+?)\.pdf$/i) || pdfName.match(/(E\d+-\w+)/i);
+  const pdfMatch = pdfName.match(/PDF-DOC-(.+?)\.pdf$/i);
   const zipMatch = zipName.match(/FACTURA(.+?)\.zip$/i) || zipName.match(/(E\d+-\w+)/i);
-
   const pdfBase = pdfMatch?.[1] || "";
   const zipBase = zipMatch?.[1] || "";
-
   if (pdfBase && zipBase) {
     return { baseName: pdfBase, mismatch: pdfBase !== zipBase };
   }
-
   return { baseName: pdfBase || zipBase || "", mismatch: false };
 }
 
@@ -112,18 +99,26 @@ export default function ProcessEditor() {
   const [invoiceName, setInvoiceName] = useState("");
   const [status, setStatus] = useState("draft");
 
-  // Base files
   const [comprobantePdf, setComprobantePdf] = useState<File | null>(null);
   const [sunatZip, setSunatZip] = useState<File | null>(null);
   const [detectedBase, setDetectedBase] = useState("");
   const [nameMismatch, setNameMismatch] = useState(false);
 
-  // Support documents
   const [supportDocs, setSupportDocs] = useState<Record<CategoryKey, DocFile[]>>({
     guia_remision: [],
     orden_compra: [],
     partes_ingreso: [],
   });
+
+  const {
+    uploading,
+    loadingFiles,
+    uploadFile,
+    uploadBaseFiles,
+    uploadSupportDocs,
+    deleteFile,
+    loadAllFiles,
+  } = useProcessFiles(id, user?.id);
 
   useEffect(() => {
     loadProcess();
@@ -148,11 +143,30 @@ export default function ProcessEditor() {
     setLoading(false);
   };
 
-  const handleComprobante = (files: File[]) => {
+  // Load saved files once user and process are ready
+  useEffect(() => {
+    if (!id || !user || loading) return;
+
+    loadAllFiles().then((result) => {
+      if (result.comprobante) {
+        setComprobantePdf(result.comprobante);
+        const match = result.comprobante.name.match(/PDF-DOC-(.+?)\.pdf$/i);
+        if (match) {
+          setDetectedBase(match[1]);
+          if (!invoiceName) setInvoiceName(match[1]);
+        }
+      }
+      if (result.sunatZip) {
+        setSunatZip(result.sunatZip);
+      }
+      setSupportDocs(result.supportDocs);
+    });
+  }, [id, user, loading]);
+
+  const handleComprobante = async (files: File[]) => {
     const file = files[0];
     if (!file) return;
     setComprobantePdf(file);
-    // Extract base name from PDF immediately
     const match = file.name.match(/PDF-DOC-(.+?)\.pdf$/i);
     if (match) {
       const baseName = match[1];
@@ -160,13 +174,19 @@ export default function ProcessEditor() {
       if (!invoiceName) setInvoiceName(baseName);
     }
     if (sunatZip) checkMismatch(file.name, sunatZip.name);
+    // Upload to storage
+    await uploadFile(file, "comprobante");
+    toast.success("PDF del comprobante guardado");
   };
 
-  const handleSunatZip = (files: File[]) => {
+  const handleSunatZip = async (files: File[]) => {
     const file = files[0];
     if (!file) return;
     setSunatZip(file);
     if (comprobantePdf) checkMismatch(comprobantePdf.name, file.name);
+    // Upload to storage
+    await uploadFile(file, "sunat_zip");
+    toast.success("ZIP de SUNAT guardado");
   };
 
   const checkMismatch = (pdfName: string, zipName: string) => {
@@ -189,16 +209,42 @@ export default function ProcessEditor() {
         ...prev,
         [category]: [...prev[category as CategoryKey], ...newDocs],
       }));
+
+      // Upload to storage
+      await uploadSupportDocs(category, files);
+      toast.success(`${files.length} archivo(s) guardado(s)`);
     },
-    []
+    [uploadSupportDocs]
   );
 
-  const handleRemoveFile = useCallback((category: string, fileId: string) => {
-    setSupportDocs((prev) => ({
-      ...prev,
-      [category]: prev[category as CategoryKey].filter((f) => f.id !== fileId),
-    }));
-  }, []);
+  const handleRemoveFile = useCallback(
+    async (category: string, fileId: string) => {
+      const file = supportDocs[category as CategoryKey]?.find((f) => f.id === fileId);
+      setSupportDocs((prev) => ({
+        ...prev,
+        [category]: prev[category as CategoryKey].filter((f) => f.id !== fileId),
+      }));
+      if (file) {
+        await deleteFile(category, file.file.name);
+      }
+    },
+    [supportDocs, deleteFile]
+  );
+
+  const handleRemoveComprobante = async () => {
+    if (comprobantePdf) {
+      await deleteFile("comprobante", comprobantePdf.name);
+    }
+    setComprobantePdf(null);
+    setDetectedBase("");
+  };
+
+  const handleRemoveSunatZip = async () => {
+    if (sunatZip) {
+      await deleteFile("sunat_zip", sunatZip.name);
+    }
+    setSunatZip(null);
+  };
 
   const handleRotateFile = useCallback((category: string, fileId: string) => {
     setSupportDocs((prev) => ({
@@ -247,11 +293,9 @@ export default function ProcessEditor() {
       const baseName = invoiceName || detectedBase || "E001-000000";
       const prefix = `PDF-DOC-${baseName}`;
 
-      // Read SUNAT ZIP contents
       const sunatZipData = await sunatZip!.arrayBuffer();
       const sunatContents = await JSZip.loadAsync(sunatZipData);
 
-      // Find XML file
       let xmlFile: { name: string; data: Uint8Array } | null = null;
       for (const [name, entry] of Object.entries(sunatContents.files)) {
         if (name.toLowerCase().endsWith(".xml") && !entry.dir) {
@@ -260,10 +304,7 @@ export default function ProcessEditor() {
         }
       }
 
-      // Create inner ZIP
       const innerZip = new JSZip();
-
-      // Add merged PDFs for each category
       for (const cat of SUPPORT_CATEGORIES) {
         const docs = supportDocs[cat.key];
         if (docs.length > 0) {
@@ -271,33 +312,23 @@ export default function ProcessEditor() {
           innerZip.file(`${prefix} ${cat.pdfSuffix}.pdf`, mergedBytes);
         }
       }
-
-      // Add XML copy
       if (xmlFile) {
         innerZip.file(xmlFile.name, xmlFile.data);
       }
 
       const innerZipBlob = await innerZip.generateAsync({ type: "uint8array" });
 
-      // Create outer ZIP
       const outerZip = new JSZip();
-
-      // Add original SUNAT ZIP contents (extracted files)
       for (const [name, entry] of Object.entries(sunatContents.files)) {
         if (!entry.dir) {
           outerZip.file(name, await entry.async("uint8array"));
         }
       }
-
-      // Add comprobante PDF
       outerZip.file(comprobantePdf!.name, await comprobantePdf!.arrayBuffer());
-
-      // Add inner ZIP
       outerZip.file(`${baseName}.zip`, innerZipBlob);
 
       const finalBlob = await outerZip.generateAsync({ type: "blob" });
 
-      // Download
       const url = URL.createObjectURL(finalBlob);
       const a = document.createElement("a");
       a.href = url;
@@ -305,7 +336,6 @@ export default function ProcessEditor() {
       a.click();
       URL.revokeObjectURL(url);
 
-      // Mark as completed
       await supabase
         .from("processes")
         .update({ status: "completed", invoice_name: invoiceName || baseName })
@@ -339,7 +369,6 @@ export default function ProcessEditor() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
@@ -363,6 +392,14 @@ export default function ProcessEditor() {
       </header>
 
       <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
+        {/* Loading files indicator */}
+        {loadingFiles && (
+          <div className="flex items-center gap-2 rounded-md bg-muted/50 px-4 py-3">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">Cargando archivos guardados…</span>
+          </div>
+        )}
+
         {/* Invoice name */}
         <Card>
           <CardHeader className="pb-3">
@@ -413,7 +450,7 @@ export default function ProcessEditor() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setComprobantePdf(null)}
+                  onClick={handleRemoveComprobante}
                   className="text-destructive hover:text-destructive"
                 >
                   Quitar
@@ -448,7 +485,7 @@ export default function ProcessEditor() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setSunatZip(null)}
+                  onClick={handleRemoveSunatZip}
                   className="text-destructive hover:text-destructive"
                 >
                   Quitar
@@ -485,7 +522,6 @@ export default function ProcessEditor() {
             <CardTitle className="text-base">Vista previa y generación</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Summary */}
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Factura:</span>
@@ -521,7 +557,6 @@ export default function ProcessEditor() {
               ))}
             </div>
 
-            {/* Structure preview */}
             {canGenerate() && (
               <div className="rounded-md bg-card p-3 text-xs">
                 <p className="mb-1 font-medium text-foreground">Estructura del ZIP final:</p>

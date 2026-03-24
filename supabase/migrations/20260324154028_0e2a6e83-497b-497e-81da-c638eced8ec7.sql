@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS process_files_unique_idx ON public.process_files (process_id, category, file_name);
