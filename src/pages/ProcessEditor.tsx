@@ -43,6 +43,92 @@ async function fileToPreview(file: File): Promise<string | undefined> {
   return undefined;
 }
 
+function buildScanFileName(originalName: string, index: number): string {
+  const dotIndex = originalName.lastIndexOf(".");
+  const baseName = dotIndex > 0 ? originalName.slice(0, dotIndex) : originalName;
+  return `${baseName}_scan_${Date.now()}_${index + 1}.jpg`;
+}
+
+async function toScannedDocumentImage(file: File, index: number): Promise<File> {
+  const imageUrl = URL.createObjectURL(file);
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("No se pudo leer la imagen"));
+      element.src = imageUrl;
+    });
+
+    const maxSide = 2200;
+    const ratio = Math.min(1, maxSide / Math.max(img.width, img.height));
+    const width = Math.max(1, Math.round(img.width * ratio));
+    const height = Math.max(1, Math.round(img.height * ratio));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    if (!ctx) throw new Error("No se pudo inicializar el procesador de imagen");
+
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      const contrast = (gray - 128) * 1.35 + 128 + 8;
+      const paperTone = contrast > 175 ? 255 : contrast > 120 ? 225 : contrast > 90 ? 170 : 0;
+
+      data[i] = paperTone;
+      data[i + 1] = paperTone;
+      data[i + 2] = paperTone;
+      data[i + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (!result) {
+            reject(new Error("No se pudo exportar la imagen procesada"));
+            return;
+          }
+          resolve(result);
+        },
+        "image/jpeg",
+        0.92
+      );
+    });
+
+    return new File([blob], buildScanFileName(file.name, index), {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
+async function prepareSupportFile(file: File, index: number): Promise<File> {
+  if (!file.type.startsWith("image/")) {
+    return file;
+  }
+
+  try {
+    return await toScannedDocumentImage(file, index);
+  } catch (error) {
+    console.error("Error procesando imagen como documento:", error);
+    return file;
+  }
+}
+
 async function imageToPdfBytes(file: File, rotation: number): Promise<Uint8Array> {
   const arrayBuffer = await file.arrayBuffer();
   const pdfDoc = await PDFDocument.create();
@@ -179,7 +265,7 @@ export default function ProcessEditor() {
     const file = files[0];
     if (!file) return;
 
-    const savedPath = await uploadFile(file, "comprobante");
+    const savedPath = await uploadFile(file, "comprobante_pdf");
     if (!savedPath) {
       toast.error("No se pudo guardar el PDF del comprobante");
       return;
@@ -218,8 +304,17 @@ export default function ProcessEditor() {
 
   const handleAddFiles = useCallback(
     async (category: string, files: File[]) => {
+      const preparedFiles = await Promise.all(files.map((file, index) => prepareSupportFile(file, index)));
+
+      const { savedFiles, failedFiles } = await uploadSupportDocs(category, preparedFiles);
+
+      if (savedFiles.length === 0) {
+        toast.error("No se pudo guardar ningún archivo en esta categoría");
+        return;
+      }
+
       const newDocs: DocFile[] = await Promise.all(
-        files.map(async (f) => ({
+        savedFiles.map(async (f) => ({
           id: generateFileId(),
           file: f,
           preview: await fileToPreview(f),
@@ -232,9 +327,14 @@ export default function ProcessEditor() {
         [category]: [...prev[category as CategoryKey], ...newDocs],
       }));
 
-      // Upload to storage
-      await uploadSupportDocs(category, files);
-      toast.success(`${files.length} archivo(s) guardado(s)`);
+      if (failedFiles.length > 0) {
+        toast.error(
+          `${savedFiles.length} archivo(s) guardado(s). ${failedFiles.length} no se pudieron guardar.`
+        );
+        return;
+      }
+
+      toast.success(`${savedFiles.length} archivo(s) procesado(s) y guardado(s)`);
     },
     [uploadSupportDocs]
   );
