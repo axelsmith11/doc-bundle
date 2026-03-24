@@ -135,7 +135,7 @@ export default function ProcessEditor() {
       .from("processes")
       .select("*")
       .eq("id", id)
-      .single();
+      .maybeSingle();
 
     if (error || !data) {
       toast.error("Proceso no encontrado");

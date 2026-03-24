@@ -30,6 +30,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadProcesses();
+
+    const handleFocus = () => loadProcesses();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
   const loadProcesses = async () => {
