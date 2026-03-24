@@ -69,7 +69,7 @@ async function mergeFilesToPdf(docs: DocFile[]): Promise<Uint8Array> {
   const mergedPdf = await PDFDocument.create();
 
   for (const doc of docs) {
-    let pdfBytes: ArrayBuffer;
+    let pdfBytes: ArrayBuffer | Uint8Array;
 
     if (doc.file.type === "application/pdf") {
       pdfBytes = await doc.file.arrayBuffer();
