@@ -431,7 +431,7 @@ export default function ProcessEditor() {
         const docs = supportDocs[cat.key];
         if (docs.length > 0) {
           const mergedBytes = await mergeFilesToPdf(docs);
-          innerZip.file(`${prefix} ${cat.pdfSuffix}.pdf`, mergedBytes);
+          innerZip.file(`${baseName} ${cat.pdfSuffix}.pdf`, mergedBytes);
         }
       }
       if (xmlFile) {
@@ -687,9 +687,9 @@ export default function ProcessEditor() {
 ├── (archivos originales SUNAT)
 ├── ${comprobantePdf?.name}
 └── 📦 ${invoiceName || detectedBase}.zip
-    ├── PDF-DOC-${invoiceName || detectedBase} Guia_Remision.pdf
-    ├── PDF-DOC-${invoiceName || detectedBase} O.C..pdf
-    ├── PDF-DOC-${invoiceName || detectedBase} Partes_de_ingreso.pdf
+     ├── ${invoiceName || detectedBase} Guia_Remision.pdf
+     ├── ${invoiceName || detectedBase} O.C..pdf
+     ├── ${invoiceName || detectedBase} Partes_de_ingreso.pdf
     └── (XML original)`}
                 </pre>
               </div>
