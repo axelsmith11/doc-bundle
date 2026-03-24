@@ -14,7 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      process_files: {
+        Row: {
+          category: string
+          created_at: string
+          file_name: string
+          file_type: string
+          id: string
+          process_id: string
+          sort_order: number
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          file_name: string
+          file_type: string
+          id?: string
+          process_id: string
+          sort_order?: number
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          file_name?: string
+          file_type?: string
+          id?: string
+          process_id?: string
+          sort_order?: number
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_files_process_id_fkey"
+            columns: ["process_id"]
+            isOneToOne: false
+            referencedRelation: "processes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processes: {
+        Row: {
+          created_at: string
+          id: string
+          invoice_name: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invoice_name?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invoice_name?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
