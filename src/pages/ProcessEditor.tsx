@@ -431,7 +431,7 @@ export default function ProcessEditor() {
         const docs = supportDocs[cat.key];
         if (docs.length > 0) {
           const mergedBytes = await mergeFilesToPdf(docs);
-          innerZip.file(`${prefix} ${cat.pdfSuffix}.pdf`, mergedBytes);
+          innerZip.file(`${baseName} ${cat.pdfSuffix}.pdf`, mergedBytes);
         }
       }
       if (xmlFile) {
