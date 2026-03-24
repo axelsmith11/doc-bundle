@@ -4,6 +4,25 @@ import { toast } from "sonner";
 import type { DocFile } from "@/components/DocumentSection";
 
 type CategoryKey = "guia_remision" | "orden_compra" | "partes_ingreso";
+type ProcessCategory = CategoryKey | "comprobante" | "sunat_zip";
+
+type StoredFileRecord = {
+  process_id: string;
+  user_id: string;
+  category: ProcessCategory;
+  file_name: string;
+  file_type: string;
+  storage_path: string;
+  sort_order: number;
+};
+
+const ALL_CATEGORIES: ProcessCategory[] = [
+  "comprobante",
+  "sunat_zip",
+  "guia_remision",
+  "orden_compra",
+  "partes_ingreso",
+];
 
 let fileIdCounter = 0;
 function generateFileId() {
@@ -19,6 +38,48 @@ async function fileToPreview(file: File): Promise<string | undefined> {
 
 function storagePath(userId: string, processId: string, category: string, fileName: string) {
   return `${userId}/${processId}/${category}/${fileName}`;
+}
+
+function inferFileType(fileName: string): string {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".zip")) return "application/zip";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".heic")) return "image/heic";
+  return "application/octet-stream";
+}
+
+async function listStoredFilesFromStorage(userId: string, processId: string): Promise<StoredFileRecord[]> {
+  const listResults = await Promise.all(
+    ALL_CATEGORIES.map(async (category) => {
+      const { data, error } = await supabase.storage
+        .from("process-files")
+        .list(`${userId}/${processId}/${category}`, {
+          limit: 200,
+          sortBy: { column: "name", order: "asc" },
+        });
+
+      if (error) {
+        console.error(`Storage list error (${category}):`, error);
+        return [] as StoredFileRecord[];
+      }
+
+      return (data ?? [])
+        .filter((entry) => !!entry.name)
+        .map((entry, index) => ({
+          process_id: processId,
+          user_id: userId,
+          category,
+          file_name: entry.name,
+          file_type: inferFileType(entry.name),
+          storage_path: storagePath(userId, processId, category, entry.name),
+          sort_order: index,
+        }));
+    })
+  );
+
+  return listResults.flat();
 }
 
 export function useProcessFiles(processId: string | undefined, userId: string | undefined) {
@@ -37,7 +98,6 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
         return null;
       }
 
-      // Upsert record in process_files
       const { error: dbError } = await supabase.from("process_files").upsert(
         {
           process_id: processId,
@@ -135,15 +195,58 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
     setLoadingFiles(true);
 
     try {
-      const { data: records } = await supabase
+      const { data: records, error: recordsError } = await supabase
         .from("process_files")
-        .select("*")
+        .select("process_id,user_id,category,file_name,file_type,storage_path,sort_order")
         .eq("process_id", processId)
         .order("sort_order", { ascending: true });
 
-      if (!records || records.length === 0) return result;
+      if (recordsError) {
+        console.error("Error loading process_files:", recordsError);
+      }
 
-      for (const rec of records) {
+      const dbRecords: StoredFileRecord[] = (records ?? []).map((rec) => ({
+        process_id: rec.process_id,
+        user_id: rec.user_id,
+        category: rec.category as ProcessCategory,
+        file_name: rec.file_name,
+        file_type: rec.file_type,
+        storage_path: rec.storage_path,
+        sort_order: rec.sort_order,
+      }));
+
+      const storageRecords = await listStoredFilesFromStorage(userId, processId);
+
+      const mergedByKey = new Map<string, StoredFileRecord>();
+      for (const rec of dbRecords) {
+        mergedByKey.set(`${rec.category}::${rec.file_name}`, rec);
+      }
+
+      const missingInDb: StoredFileRecord[] = [];
+      for (const rec of storageRecords) {
+        const key = `${rec.category}::${rec.file_name}`;
+        if (!mergedByKey.has(key)) {
+          mergedByKey.set(key, rec);
+          missingInDb.push(rec);
+        }
+      }
+
+      if (missingInDb.length > 0) {
+        const { error: recoverError } = await supabase.from("process_files").upsert(missingInDb, {
+          onConflict: "process_id,category,file_name",
+        });
+        if (recoverError) {
+          console.error("Error recovering missing process_files rows:", recoverError);
+        }
+      }
+
+      const mergedRecords = Array.from(mergedByKey.values()).sort(
+        (a, b) => a.sort_order - b.sort_order
+      );
+
+      if (mergedRecords.length === 0) return result;
+
+      for (const rec of mergedRecords) {
         const file = await downloadFile(rec.storage_path);
         if (!file) continue;
 
