@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import type { DocFile } from "@/components/DocumentSection";
 
 type CategoryKey = "guia_remision" | "orden_compra" | "partes_ingreso";
-type ProcessCategory = CategoryKey | "comprobante" | "sunat_zip";
+type ProcessCategory = CategoryKey | "comprobante_pdf" | "sunat_zip";
+type StorageCategory = ProcessCategory | "comprobante";
 
 type StoredFileRecord = {
   process_id: string;
@@ -16,13 +17,28 @@ type StoredFileRecord = {
   sort_order: number;
 };
 
-const ALL_CATEGORIES: ProcessCategory[] = [
+const DB_CATEGORIES: ProcessCategory[] = [
+  "comprobante_pdf",
+  "sunat_zip",
+  "guia_remision",
+  "orden_compra",
+  "partes_ingreso",
+];
+
+const STORAGE_CATEGORIES: StorageCategory[] = [
+  "comprobante_pdf",
   "comprobante",
   "sunat_zip",
   "guia_remision",
   "orden_compra",
   "partes_ingreso",
 ];
+
+function normalizeCategory(category: string): ProcessCategory | null {
+  if (category === "comprobante") return "comprobante_pdf";
+  if ((DB_CATEGORIES as string[]).includes(category)) return category as ProcessCategory;
+  return null;
+}
 
 let fileIdCounter = 0;
 function generateFileId() {
@@ -52,16 +68,19 @@ function inferFileType(fileName: string): string {
 
 async function listStoredFilesFromStorage(userId: string, processId: string): Promise<StoredFileRecord[]> {
   const listResults = await Promise.all(
-    ALL_CATEGORIES.map(async (category) => {
+    STORAGE_CATEGORIES.map(async (storageCategory) => {
+      const category = normalizeCategory(storageCategory);
+      if (!category) return [] as StoredFileRecord[];
+
       const { data, error } = await supabase.storage
         .from("process-files")
-        .list(`${userId}/${processId}/${category}`, {
+        .list(`${userId}/${processId}/${storageCategory}`, {
           limit: 200,
           sortBy: { column: "name", order: "asc" },
         });
 
       if (error) {
-        console.error(`Storage list error (${category}):`, error);
+        console.error(`Storage list error (${storageCategory}):`, error);
         return [] as StoredFileRecord[];
       }
 
@@ -73,7 +92,7 @@ async function listStoredFilesFromStorage(userId: string, processId: string): Pr
           category,
           file_name: entry.name,
           file_type: inferFileType(entry.name),
-          storage_path: storagePath(userId, processId, category, entry.name),
+          storage_path: storagePath(userId, processId, storageCategory, entry.name),
           sort_order: index,
         }));
     })
@@ -89,7 +108,14 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
   const uploadFile = useCallback(
     async (file: File, category: string): Promise<string | null> => {
       if (!processId || !userId) return null;
-      const path = storagePath(userId, processId, category, file.name);
+
+      const dbCategory = normalizeCategory(category);
+      if (!dbCategory) {
+        toast.error("Categoría de archivo no válida");
+        return null;
+      }
+
+      const path = storagePath(userId, processId, dbCategory, file.name);
       const { error } = await supabase.storage
         .from("process-files")
         .upload(path, file, { upsert: true });
@@ -102,7 +128,7 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
         {
           process_id: processId,
           user_id: userId,
-          category,
+          category: dbCategory,
           file_name: file.name,
           file_type: file.type,
           storage_path: path,
@@ -128,7 +154,7 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
       try {
         const uploads: Promise<any>[] = [];
         if (comprobantePdf) {
-          uploads.push(uploadFile(comprobantePdf, "comprobante"));
+          uploads.push(uploadFile(comprobantePdf, "comprobante_pdf"));
         }
         if (sunatZip) {
           uploads.push(uploadFile(sunatZip, "sunat_zip"));
@@ -143,8 +169,18 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
 
   const uploadSupportDocs = useCallback(
     async (category: string, files: File[]) => {
-      if (!processId || !userId) return;
-      await Promise.all(files.map((f) => uploadFile(f, category)));
+      if (!processId || !userId) {
+        return { savedFiles: [] as File[], failedFiles: files };
+      }
+
+      const uploads = await Promise.all(
+        files.map(async (file) => ({ file, path: await uploadFile(file, category) }))
+      );
+
+      return {
+        savedFiles: uploads.filter((item) => !!item.path).map((item) => item.file),
+        failedFiles: uploads.filter((item) => !item.path).map((item) => item.file),
+      };
     },
     [processId, userId, uploadFile]
   );
@@ -152,13 +188,36 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
   const deleteFile = useCallback(
     async (category: string, fileName: string) => {
       if (!processId || !userId) return;
-      const path = storagePath(userId, processId, category, fileName);
-      await supabase.storage.from("process-files").remove([path]);
+
+      const dbCategory = normalizeCategory(category);
+      if (!dbCategory) return;
+
+      const { data: storedRecord } = await supabase
+        .from("process_files")
+        .select("storage_path")
+        .eq("process_id", processId)
+        .eq("category", dbCategory)
+        .eq("file_name", fileName)
+        .maybeSingle();
+
+      const pathsToRemove = new Set<string>([
+        storagePath(userId, processId, dbCategory, fileName),
+      ]);
+
+      if (category === "comprobante") {
+        pathsToRemove.add(storagePath(userId, processId, "comprobante", fileName));
+      }
+
+      if (storedRecord?.storage_path) {
+        pathsToRemove.add(storedRecord.storage_path);
+      }
+
+      await supabase.storage.from("process-files").remove(Array.from(pathsToRemove));
       await supabase
         .from("process_files")
         .delete()
         .eq("process_id", processId)
-        .eq("category", category)
+        .eq("category", dbCategory)
         .eq("file_name", fileName);
     },
     [processId, userId]
@@ -250,7 +309,7 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
         const file = await downloadFile(rec.storage_path);
         if (!file) continue;
 
-        if (rec.category === "comprobante") {
+        if (rec.category === "comprobante_pdf") {
           result.comprobante = file;
         } else if (rec.category === "sunat_zip") {
           result.sunatZip = file;
