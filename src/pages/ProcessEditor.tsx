@@ -152,25 +152,26 @@ export default function ProcessEditor() {
     const file = files[0];
     if (!file) return;
     setComprobantePdf(file);
-    updateDetection(file.name, sunatZip?.name || "");
+    // Extract base name from PDF immediately
+    const match = file.name.match(/PDF-DOC-(.+?)\.pdf$/i);
+    if (match) {
+      const baseName = match[1];
+      setDetectedBase(baseName);
+      if (!invoiceName) setInvoiceName(baseName);
+    }
+    if (sunatZip) checkMismatch(file.name, sunatZip.name);
   };
 
   const handleSunatZip = (files: File[]) => {
     const file = files[0];
     if (!file) return;
     setSunatZip(file);
-    updateDetection(comprobantePdf?.name || "", file.name);
+    if (comprobantePdf) checkMismatch(comprobantePdf.name, file.name);
   };
 
-  const updateDetection = (pdfName: string, zipName: string) => {
-    if (pdfName && zipName) {
-      const { baseName, mismatch } = detectBaseName(pdfName, zipName);
-      setDetectedBase(baseName);
-      setNameMismatch(mismatch);
-      if (baseName && !invoiceName) {
-        setInvoiceName(baseName);
-      }
-    }
+  const checkMismatch = (pdfName: string, zipName: string) => {
+    const { mismatch } = detectBaseName(pdfName, zipName);
+    setNameMismatch(mismatch);
   };
 
   const handleAddFiles = useCallback(
