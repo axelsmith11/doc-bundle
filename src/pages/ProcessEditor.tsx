@@ -59,7 +59,7 @@ async function imageToPdfBytes(file: File, rotation: number): Promise<Uint8Array
   page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
 
   if (rotation) {
-    page.setRotation({ type: 0, angle: rotation });
+    page.setRotation(({ type: 0, angle: rotation }) as any);
   }
 
   return pdfDoc.save();
