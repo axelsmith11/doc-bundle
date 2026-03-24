@@ -38,7 +38,7 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
       }
 
       // Upsert record in process_files
-      await supabase.from("process_files").upsert(
+      const { error: dbError } = await supabase.from("process_files").upsert(
         {
           process_id: processId,
           user_id: userId,
@@ -48,8 +48,13 @@ export function useProcessFiles(processId: string | undefined, userId: string | 
           storage_path: path,
           sort_order: 0,
         },
-        { onConflict: "process_id,category,file_name" as any }
+        { onConflict: "process_id,category,file_name" }
       );
+      if (dbError) {
+        console.error("DB upsert error:", dbError);
+        toast.error("Error guardando referencia del archivo");
+        return null;
+      }
 
       return path;
     },
