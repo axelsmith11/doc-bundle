@@ -163,9 +163,28 @@ export default function ProcessEditor() {
     });
   }, [id, user, loading]);
 
+  useEffect(() => {
+    if (!uploading) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [uploading]);
+
   const handleComprobante = async (files: File[]) => {
     const file = files[0];
     if (!file) return;
+
+    const savedPath = await uploadFile(file, "comprobante");
+    if (!savedPath) {
+      toast.error("No se pudo guardar el PDF del comprobante");
+      return;
+    }
+
     setComprobantePdf(file);
     const match = file.name.match(/PDF-DOC-(.+?)\.pdf$/i);
     if (match) {
@@ -174,18 +193,21 @@ export default function ProcessEditor() {
       if (!invoiceName) setInvoiceName(baseName);
     }
     if (sunatZip) checkMismatch(file.name, sunatZip.name);
-    // Upload to storage
-    await uploadFile(file, "comprobante");
     toast.success("PDF del comprobante guardado");
   };
 
   const handleSunatZip = async (files: File[]) => {
     const file = files[0];
     if (!file) return;
+
+    const savedPath = await uploadFile(file, "sunat_zip");
+    if (!savedPath) {
+      toast.error("No se pudo guardar el ZIP de SUNAT");
+      return;
+    }
+
     setSunatZip(file);
     if (comprobantePdf) checkMismatch(comprobantePdf.name, file.name);
-    // Upload to storage
-    await uploadFile(file, "sunat_zip");
     toast.success("ZIP de SUNAT guardado");
   };
 
