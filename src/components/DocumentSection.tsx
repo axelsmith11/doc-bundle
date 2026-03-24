@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { X, GripVertical, RotateCw, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +31,10 @@ export default function DocumentSection({
   onReorder,
 }: DocumentSectionProps) {
   const [dragging, setDragging] = useState<string | null>(null);
+  const touchStartRef = useRef<{ id: string; startY: number; startX: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Desktop drag
   const handleDragStart = (id: string) => setDragging(id);
 
   const handleDragOver = (e: React.DragEvent, targetId: string) => {
@@ -50,6 +53,47 @@ export default function DocumentSection({
 
   const handleDragEnd = () => setDragging(null);
 
+  // Touch drag (mobile)
+  const handleTouchStart = (e: React.TouchEvent, id: string) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { id, startY: touch.clientY, startX: touch.clientX };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || !containerRef.current) return;
+    const touch = e.touches[0];
+    const dx = Math.abs(touch.clientX - touchStartRef.current.startX);
+    const dy = Math.abs(touch.clientY - touchStartRef.current.startY);
+
+    // Only reorder if moved enough
+    if (dx < 20 && dy < 20) return;
+
+    // Find element under touch
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!el) return;
+
+    const card = el.closest("[data-file-id]") as HTMLElement | null;
+    if (!card) return;
+
+    const targetId = card.dataset.fileId;
+    if (!targetId || targetId === touchStartRef.current.id) return;
+
+    const newFiles = [...files];
+    const fromIdx = newFiles.findIndex((f) => f.id === touchStartRef.current!.id);
+    const toIdx = newFiles.findIndex((f) => f.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const [moved] = newFiles.splice(fromIdx, 1);
+    newFiles.splice(toIdx, 0, moved);
+    onReorder(category, newFiles);
+    setDragging(touchStartRef.current.id);
+  };
+
+  const handleTouchEnd = () => {
+    touchStartRef.current = null;
+    setDragging(null);
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -64,16 +108,23 @@ export default function DocumentSection({
       </CardHeader>
       <CardContent className="space-y-3">
         {files.length > 0 && (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          <div
+            ref={containerRef}
+            className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4"
+          >
             {files.map((doc) => (
               <div
                 key={doc.id}
+                data-file-id={doc.id}
                 draggable
                 onDragStart={() => handleDragStart(doc.id)}
                 onDragOver={(e) => handleDragOver(e, doc.id)}
                 onDragEnd={handleDragEnd}
+                onTouchStart={(e) => handleTouchStart(e, doc.id)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
                 className={`group relative flex flex-col items-center rounded-md border bg-muted/30 p-2 transition-shadow ${
-                  dragging === doc.id ? "opacity-50" : "hover:shadow-sm"
+                  dragging === doc.id ? "opacity-50 ring-2 ring-primary" : "hover:shadow-sm"
                 }`}
               >
                 <div className="absolute left-1 top-1 cursor-grab text-muted-foreground/40">
