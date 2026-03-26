@@ -417,7 +417,7 @@ export default function CitaEditor() {
 
       {/* Toolbar */}
       <Card>
-        <CardContent className="pt-5">
+        <CardContent className="pt-5 space-y-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">Fecha de despacho</label>
@@ -433,26 +433,54 @@ export default function CitaEditor() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="min-w-0 flex-1">
-              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                <FileText className="h-3.5 w-3.5" /> PDFs de OC
-              </label>
-              <Input ref={pdfInputRef} type="file" accept=".pdf" multiple className="text-sm" />
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={handleProcess} disabled={processing}>
-                {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                Procesar
-              </Button>
-              <Button onClick={handleExport} disabled={!rows.length || exporting} variant="secondary">
-                {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                Excel
-              </Button>
-            </div>
+            <Button onClick={handleExport} disabled={!rows.length || exporting} variant="secondary">
+              {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              Exportar Excel
+            </Button>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+
+          {/* Drag & drop zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
+            onDragLeave={() => setDraggingOver(false)}
+            onDrop={handleFileDrop}
+            onClick={() => !processing && fileInputRef.current?.click()}
+            className={cn(
+              "relative flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors",
+              draggingOver
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-primary/50 hover:bg-muted/30",
+              processing && "pointer-events-none opacity-60"
+            )}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              multiple
+              className="hidden"
+              onChange={handleFileInput}
+            />
+            {processing ? (
+              <>
+                <Loader2 className="mb-2 h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm font-medium text-foreground">{status || "Procesando…"}</p>
+              </>
+            ) : (
+              <>
+                <Upload className="mb-2 h-8 w-8 text-muted-foreground/60" />
+                <p className="text-sm font-medium text-foreground">
+                  Arrastra PDFs de OC aquí o haz clic para seleccionar
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Se procesarán automáticamente · Puedes agregar más PDFs sin perder los anteriores
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="text-xs"><Database className="mr-1 h-3 w-3" />{MASTER_SIZE} productos</Badge>
-            {status && <span className="text-xs text-muted-foreground">{status}</span>}
             {rows.length > 0 && (
               <>
                 <Badge variant="secondary" className="text-xs">OCs: {ocs.size}</Badge>
