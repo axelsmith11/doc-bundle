@@ -108,16 +108,7 @@ function strOrEmpty(v: unknown): string | undefined {
   return s.length ? s : undefined;
 }
 
-const PAD_EPOCH = new Date(Date.UTC(1899, 11, 30));
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-function excelSerialToDate(serial: number): Date {
-  const ms = Math.round(serial) * MS_PER_DAY;
-  return new Date(PAD_EPOCH.getTime() + ms);
-}
-
-// ─── Embedded master ───
-const MASTER_MAP: Record<string, MasterEntry> = masterDataJson as Record<string, MasterEntry>;
-const MASTER_SIZE = Object.keys(MASTER_MAP).length;
+const PAD_EPOCH_UNUSED = new Date(Date.UTC(1899, 11, 30)); // kept for reference
 
 // ─── PDF parsing ───
 async function readPdfText(file: File): Promise<string> {
