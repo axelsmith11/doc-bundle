@@ -344,7 +344,8 @@ export default function CitaEditor() {
     }
     const { data, error } = await supabase.storage.from("cita-files").download(sf.storage_path);
     if (error || !data) { toast.error("Error descargando archivo"); return; }
-    const file = new File([data], sf.file_name, { type: "application/pdf" });
+    const ab = await data.arrayBuffer();
+    const file = new globalThis.File([ab], sf.file_name, { type: "application/pdf" });
     // Process without re-uploading (already saved)
     const fechaTexto = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
     setProcessing(true);
