@@ -598,9 +598,29 @@ export default function CitaEditor() {
                 </PopoverContent>
               </Popover>
             </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Hora de entrega</label>
+              <Select value={horaEntrega} onValueChange={setHoraEntrega}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 13 }, (_, i) => {
+                    const h = String(6 + i).padStart(2, "0");
+                    return (
+                      <SelectItem key={h} value={`${h}:00`}>{`${h}:00`}</SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
             <Button onClick={handleExport} disabled={!rows.length || exporting} variant="secondary">
               {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
               Exportar Excel
+            </Button>
+            <Button onClick={handleGenerarCita} disabled={!rows.length || !fecha || generatingCita}>
+              {generatingCita ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Generar Cita
             </Button>
           </div>
 
