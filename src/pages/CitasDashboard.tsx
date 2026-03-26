@@ -1,24 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  Plus, Search, FileSpreadsheet, Clock, CheckCircle2, Loader2, CalendarDays, Trash2,
+  Plus, Search, FileSpreadsheet, Clock, CheckCircle2, Loader2, CalendarDays, Trash2, CalendarIcon, X,
 } from "lucide-react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
 interface Cita {
@@ -38,6 +37,7 @@ export default function CitasDashboard() {
   const [citas, setCitas] = useState<Cita[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState<Date>();
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
@@ -52,7 +52,7 @@ export default function CitasDashboard() {
     const { data, error } = await supabase
       .from("citas")
       .select("*")
-      .order("updated_at", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (error) toast.error("Error cargando citas");
     else setCitas((data as Cita[]) || []);
@@ -89,9 +89,19 @@ export default function CitasDashboard() {
     toast.success("Cita eliminada");
   };
 
-  const filtered = citas.filter(
-    (c) => !search || (c.name ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = citas.filter((c) => {
+    if (search && !(c.name ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+    if (dateFilter) {
+      // Filter by fecha_despacho or created_at
+      const despacho = c.fecha_despacho
+        ? new Date(c.fecha_despacho + "T00:00:00").toDateString()
+        : null;
+      const created = new Date(c.created_at).toDateString();
+      const target = dateFilter.toDateString();
+      if (despacho !== target && created !== target) return false;
+    }
+    return true;
+  });
 
   return (
     <div>
@@ -108,14 +118,44 @@ export default function CitasDashboard() {
         </Button>
       </div>
 
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nombre…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn("w-[200px] justify-start text-left font-normal", !dateFilter && "text-muted-foreground")}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateFilter ? format(dateFilter, "dd MMM yyyy", { locale: es }) : "Filtrar por fecha"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={dateFilter}
+                onSelect={setDateFilter}
+                initialFocus
+                locale={es}
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          {dateFilter && (
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setDateFilter(undefined)}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -126,7 +166,7 @@ export default function CitasDashboard() {
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <FileSpreadsheet className="mb-3 h-10 w-10 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
-            {search ? "No se encontraron citas" : "Aún no tienes citas. ¡Crea la primera!"}
+            {search || dateFilter ? "No se encontraron citas" : "Aún no tienes citas. ¡Crea la primera!"}
           </p>
         </div>
       ) : (
@@ -153,7 +193,7 @@ export default function CitasDashboard() {
                       <span>{cita.items_count} ítems · {cita.ocs_count} OC(s)</span>
                     )}
                     <span>
-                      Actualizado {new Date(cita.updated_at).toLocaleDateString("es-PE", {
+                      {new Date(cita.created_at).toLocaleDateString("es-PE", {
                         day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
                       })}
                     </span>
