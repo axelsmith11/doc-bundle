@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,15 +57,6 @@ interface MasterEntry {
 }
 
 // ─── Helpers ───
-function norm(s: string): string {
-  return String(s || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function toNumber3(v: unknown): number | undefined {
   if (v === null || v === undefined || v === "") return undefined;
   let s = String(v).trim().replace(/\u00A0/g, "");
@@ -97,11 +88,6 @@ function fmtMiles0(v: unknown): string {
   return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
-function valOr(current: unknown, fallback: unknown): unknown {
-  if (current === 0 || current === "0") return 0;
-  return current || fallback || "";
-}
-
 function numOrEmpty(v: unknown): number | undefined {
   if (v === 0 || v === "0") return 0;
   const n = Number(v);
@@ -124,55 +110,9 @@ function excelSerialToDate(serial: number): Date {
   return new Date(PAD_EPOCH.getTime() + ms);
 }
 
-// ─── Master helpers ───
-const MASTER_DB_KEY = "oc_master_rows_v1";
-
-function buildMasterIndex(rows: Record<string, unknown>[]): MasterData {
-  const data: MasterData = { loaded: false, rows: rows || [], headerMap: {}, map: new Map() };
-  if (!data.rows.length) return data;
-
-  const first = data.rows[0];
-  Object.keys(first).forEach((k) => { data.headerMap[norm(k)] = k; });
-
-  const pick = (row: Record<string, unknown>, humanName: string) => {
-    const k = data.headerMap[norm(humanName)];
-    return k ? row[k] : "";
-  };
-
-  for (const row of data.rows) {
-    const code = String(
-      pick(row, "CODIGO") ||
-      pick(row, "CODIGO SAP") ||
-      pick(row, "CODIGO TAI LOY SAP (IGUAL A OC)") ||
-      pick(row, "CODIGO TAI LOY SAP") ||
-      row["codigo"] || row["COD"] || ""
-    ).trim();
-    if (!code) continue;
-    data.map.set(code, row);
-  }
-
-  data.loaded = data.map.size > 0;
-  return data;
-}
-
-function saveMasterToStorage(rows: Record<string, unknown>[]) {
-  try {
-    localStorage.setItem(MASTER_DB_KEY, JSON.stringify(rows));
-  } catch {
-    // If too large, silently fail
-  }
-}
-
-function loadMasterFromStorage(): Record<string, unknown>[] | null {
-  try {
-    const raw = localStorage.getItem(MASTER_DB_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    return Array.isArray(data) && data.length ? data : null;
-  } catch {
-    return null;
-  }
-}
+// ─── Embedded master ───
+const MASTER_MAP: Record<string, MasterEntry> = masterDataJson as Record<string, MasterEntry>;
+const MASTER_SIZE = Object.keys(MASTER_MAP).length;
 
 // ─── PDF parsing ───
 async function readPdfText(file: File): Promise<string> {
@@ -212,65 +152,50 @@ function extractRowsFromText(
       .trim();
     const cantidad = Math.round(parseFloat(m[4]));
 
+    // Auto-fill from embedded master
+    const src = MASTER_MAP[codigo];
+    let undCajaMaster: number | string = "";
+    let cantCajasMaster: number | string | null = "";
+    let cantPaletas = "";
+    let prodConVenc: string | number = "";
+    let prodNuevo: string | number = "";
+    let ean13: string | number = "";
+    let altoCm: number | string = "";
+    let anchoCm: number | string = "";
+    let largoCm: number | string = "";
+    let volumenCm3: number | string = "";
+    let pesoKg: number | string = "";
+    let ean14: string | number = "";
+
+    if (src) {
+      undCajaMaster = src.undCajaMaster ?? "";
+      cantPaletas = src.cantPaletas != null ? String(src.cantPaletas) : "";
+      prodConVenc = src.prodConVenc ?? "";
+      prodNuevo = src.prodNuevo ?? "";
+      ean13 = src.ean13 ?? "";
+      ean14 = src.ean14 ?? "";
+      altoCm = src.altoCm ?? "";
+      anchoCm = src.anchoCm ?? "";
+      largoCm = src.largoCm ?? "";
+      volumenCm3 = src.volumenCm3 ?? "";
+      pesoKg = src.pesoKg ?? "";
+
+      const upc = Number(undCajaMaster);
+      if (upc === 0) cantCajasMaster = 0;
+      else if (Number.isFinite(upc) && upc > 0) cantCajasMaster = Math.trunc(cantidad / upc);
+      else cantCajasMaster = null;
+    }
+
     rows.push({
-      item: counter,
-      carro: 1,
-      tn: 2,
-      oc,
-      fechaDate,
-      fechaTexto,
-      codigo,
-      descripcion,
-      umb: "UN",
-      cantidad,
-      undCajaMaster: "", cantCajasMaster: "", cantPaletas: "",
-      prodConVenc: "", prodNuevo: "", ean13: "",
-      altoCm: "", anchoCm: "", largoCm: "",
-      volumenCm3: "", pesoKg: "", ean14: "",
+      item: counter, carro: 1, tn: 2, oc, fechaDate, fechaTexto,
+      codigo, descripcion, umb: "UN", cantidad,
+      undCajaMaster, cantCajasMaster, cantPaletas,
+      prodConVenc, prodNuevo, ean13,
+      altoCm, anchoCm, largoCm, volumenCm3, pesoKg, ean14,
     });
     counter++;
   }
   return { oc, rows };
-}
-
-function autoRellenarDesdeMaestro(rows: OCRow[], masterData: MasterData): OCRow[] {
-  if (!masterData.loaded) return rows;
-
-  const get = (row: Record<string, unknown>, human: string) => {
-    const k = masterData.headerMap[norm(human)];
-    if (!k) return "";
-    const val = row[k];
-    if (val === 0 || val === "0") return 0;
-    return val ?? "";
-  };
-
-  return rows.map((r) => {
-    const clave = String(r.codigo).trim();
-    const src = masterData.map.get(clave);
-    if (!src) return r;
-
-    const updated = { ...r };
-    const undCaja = get(src, "UNIDADES POR CAJA MASTER");
-    updated.undCajaMaster = Number.isFinite(Number(undCaja)) ? parseInt(String(undCaja), 10) : "";
-    updated.cantPaletas = String(get(src, "CANT. PALETAS"));
-    updated.prodConVenc = valOr(get(src, "PRODUCTO CON VENCIMIENTO (NO = 0/ SI =1)"), get(src, "PRODUCTO CON VENCIMIENTO")) as string | number;
-    updated.prodNuevo = valOr(get(src, "¿PRODUCTO NUEVO? (NO = 0/ SI =1)"), get(src, "PRODUCTO NUEVO")) as string | number;
-    updated.ean13 = toNumber3(valOr(get(src, "EAN 13 UMB"), valOr(get(src, "EAN13"), get(src, "EAN 13")))) ?? "";
-    updated.ean14 = toNumber3(valOr(get(src, "EAN 14 CAJA"), get(src, "EAN14"))) ?? "";
-    updated.altoCm = toNumber3(valOr(get(src, "Alto Caja CM"), get(src, "ALTO CAJA CM"))) ?? "";
-    updated.anchoCm = toNumber3(valOr(get(src, "Ancho Caja CM"), get(src, "ANCHO CAJA CM"))) ?? "";
-    updated.largoCm = toNumber3(valOr(get(src, "Largo Caja CM"), get(src, "LARGO CAJA CM"))) ?? "";
-    updated.volumenCm3 = toNumber3(valOr(get(src, "VOLUMEN POR CAJA CM3"), get(src, "VOLUMEN CAJA CM3"))) ?? "";
-    updated.pesoKg = toNumber3(valOr(get(src, "PESO POR CAJA KG"), get(src, "PESO CAJA KG"))) ?? "";
-
-    const upc = Number(updated.undCajaMaster);
-    const cant = Number(updated.cantidad);
-    if (upc === 0) updated.cantCajasMaster = 0;
-    else if (Number.isFinite(upc) && upc > 0 && Number.isFinite(cant)) updated.cantCajasMaster = Math.trunc(cant / upc);
-    else updated.cantCajasMaster = null;
-
-    return updated;
-  });
 }
 
 // ─── Excel export ───
@@ -392,57 +317,14 @@ async function generarExcel(rows: OCRow[]) {
 
 // ─── Component ───
 export default function Citas() {
-  const [master, setMaster] = useState<MasterData>({ loaded: false, rows: [], headerMap: {}, map: new Map() });
   const [rows, setRows] = useState<OCRow[]>([]);
   const [ocs, setOcs] = useState<Set<string>>(new Set());
   const [fechaSerial, setFechaSerial] = useState("");
   const [fechaPicker, setFechaPicker] = useState("");
   const [processing, setProcessing] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(`Maestro embebido: ${MASTER_SIZE} códigos.`);
   const pdfInputRef = useRef<HTMLInputElement>(null);
-  const masterInputRef = useRef<HTMLInputElement>(null);
-
-  // Load master from localStorage on mount
-  useEffect(() => {
-    const stored = loadMasterFromStorage();
-    if (stored) {
-      const data = buildMasterIndex(stored);
-      setMaster(data);
-      setStatus(`Maestro cargado (${data.map.size} códigos).`);
-    } else {
-      setStatus("Carga tu Excel maestro (solo la primera vez).");
-    }
-  }, []);
-
-  const handleMasterUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      setStatus("Cargando maestro…");
-      const XLSX = await import("xlsx");
-      const ab = await file.arrayBuffer();
-      const wb = XLSX.read(ab, { type: "array" });
-      const wsName = wb.SheetNames[0];
-      const ws = wb.Sheets[wsName];
-      const jsonRows = XLSX.utils.sheet_to_json(ws, { defval: "" }) as Record<string, unknown>[];
-      if (!jsonRows.length) throw new Error("El maestro está vacío.");
-
-      const data = buildMasterIndex(jsonRows);
-      saveMasterToStorage(jsonRows);
-      setMaster(data);
-
-      if (rows.length && data.loaded) {
-        const updated = autoRellenarDesdeMaestro(rows, data);
-        setRows(updated);
-      }
-
-      setStatus(data.loaded ? `Maestro cargado y guardado (${data.map.size} códigos).` : "No se detectaron códigos en el maestro.");
-    } catch (err) {
-      console.error(err);
-      setStatus("No se pudo leer el maestro. Verifica el archivo.");
-    }
-  }, [rows]);
 
   const handleProcessPdfs = useCallback(async () => {
     const files = Array.from(pdfInputRef.current?.files || []);
@@ -478,13 +360,10 @@ export default function Citas() {
         counter += parsed.length;
       }
 
-      let finalRows = allRows;
-      if (master.loaded) finalRows = autoRellenarDesdeMaestro(allRows, master);
-
-      setRows(finalRows);
+      setRows(allRows);
       setOcs(allOcs);
-      setStatus(finalRows.length
-        ? `Listo. ${finalRows.length} ítems de ${allOcs.size} OC(s).`
+      setStatus(allRows.length
+        ? `Listo. ${allRows.length} ítems de ${allOcs.size} OC(s).`
         : "No se encontraron ítems.");
     } catch (e) {
       console.error(e);
@@ -492,7 +371,7 @@ export default function Citas() {
     } finally {
       setProcessing(false);
     }
-  }, [fechaSerial, fechaPicker, master]);
+  }, [fechaSerial, fechaPicker]);
 
   const handleQuantityChange = useCallback((idx: number, value: string) => {
     setRows((prev) => {
@@ -543,31 +422,28 @@ export default function Citas() {
 
       {/* Controls */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Master upload */}
+        {/* Master info */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Database className="h-4 w-4 text-primary" />
-              Excel Maestro
+              Maestro de Productos
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              {master.loaded
-                ? `✓ ${master.map.size} códigos cargados`
-                : "Sube tu archivo .xls/.xlsx maestro"}
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs">
+                <FileSpreadsheet className="mr-1 h-3 w-3" />
+                {MASTER_SIZE} códigos cargados
+              </Badge>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Datos de empaque embebidos (Tai Loy SAP). Se aplican automáticamente al procesar.
             </p>
-            <Input
-              ref={masterInputRef}
-              type="file"
-              accept=".xls,.xlsx"
-              onChange={handleMasterUpload}
-              className="text-sm"
-            />
           </CardContent>
         </Card>
 
-        {/* Date + PDF upload */}
+        {/* Date */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -631,7 +507,7 @@ export default function Citas() {
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary">
             <FileSpreadsheet className="mr-1 h-3 w-3" />
-            {master.loaded ? `Maestro OK (${master.map.size})` : "Sin maestro"}
+            Maestro OK ({MASTER_SIZE})
           </Badge>
           <Badge variant="secondary">OCs: {ocs.size}</Badge>
           <Badge variant="secondary">Ítems: {rows.length}</Badge>
