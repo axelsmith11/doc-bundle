@@ -71,6 +71,23 @@ export default function Dashboard() {
     else if (data) navigate(`/proceso/${data.id}`);
   };
 
+  const deleteProcess = async () => {
+    if (!deleteTarget) return;
+    // Delete files from storage
+    const { data: files } = await supabase
+      .from("process_files")
+      .select("storage_path")
+      .eq("process_id", deleteTarget);
+    if (files?.length) {
+      await supabase.storage.from("process-files").remove(files.map((f) => f.storage_path));
+    }
+    await supabase.from("process_files").delete().eq("process_id", deleteTarget);
+    await supabase.from("processes").delete().eq("id", deleteTarget);
+    setDeleteTarget(null);
+    setProcesses((prev) => prev.filter((p) => p.id !== deleteTarget));
+    toast.success("Proceso eliminado");
+  };
+
   const filtered = processes.filter(
     (p) => !search || (p.invoice_name ?? "").toLowerCase().includes(search.toLowerCase())
   );

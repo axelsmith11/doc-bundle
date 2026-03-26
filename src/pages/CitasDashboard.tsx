@@ -73,6 +73,22 @@ export default function CitasDashboard() {
     else if (data) navigate(`/cita/${data.id}`);
   };
 
+  const deleteCita = async () => {
+    if (!deleteTarget) return;
+    const { data: files } = await supabase
+      .from("cita_files")
+      .select("storage_path")
+      .eq("cita_id", deleteTarget);
+    if (files?.length) {
+      await supabase.storage.from("cita-files").remove(files.map((f) => f.storage_path));
+    }
+    await supabase.from("cita_files").delete().eq("cita_id", deleteTarget);
+    await supabase.from("citas").delete().eq("id", deleteTarget);
+    setDeleteTarget(null);
+    setCitas((prev) => prev.filter((c) => c.id !== deleteTarget));
+    toast.success("Cita eliminada");
+  };
+
   const filtered = citas.filter(
     (c) => !search || (c.name ?? "").toLowerCase().includes(search.toLowerCase())
   );
