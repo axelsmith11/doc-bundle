@@ -14,6 +14,80 @@ export type Database = {
   }
   public: {
     Tables: {
+      cita_files: {
+        Row: {
+          cita_id: string
+          created_at: string
+          file_name: string
+          file_type: string
+          id: string
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          cita_id: string
+          created_at?: string
+          file_name: string
+          file_type: string
+          id?: string
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          cita_id?: string
+          created_at?: string
+          file_name?: string
+          file_type?: string
+          id?: string
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cita_files_cita_id_fkey"
+            columns: ["cita_id"]
+            isOneToOne: false
+            referencedRelation: "citas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      citas: {
+        Row: {
+          created_at: string
+          fecha_despacho: string | null
+          id: string
+          items_count: number
+          name: string | null
+          ocs_count: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          fecha_despacho?: string | null
+          id?: string
+          items_count?: number
+          name?: string | null
+          ocs_count?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          fecha_despacho?: string | null
+          id?: string
+          items_count?: number
+          name?: string | null
+          ocs_count?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       process_files: {
         Row: {
           category: string
