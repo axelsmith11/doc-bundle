@@ -276,7 +276,7 @@ export default function CitaEditor() {
   }, [id, user]);
 
   const processFiles = useCallback(async (files: File[], useFecha?: Date) => {
-    if (!files.length) return;
+    if (!files.length || processing) return;
     const effectiveFecha = useFecha || fecha;
     if (!effectiveFecha) {
       // Queue files and prompt for date
