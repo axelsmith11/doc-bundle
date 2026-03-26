@@ -451,7 +451,7 @@ export default function CitaEditor() {
     }
   }, [rows, fecha, citaName, horaEntrega, id]);
 
-
+  const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDraggingOver(false);
     const files = Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf");
