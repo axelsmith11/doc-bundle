@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   Upload, FileSpreadsheet, Loader2, Trash2, Download, FileText,
-  CalendarIcon, Database, ArrowLeft, Save, File, X,
+  CalendarIcon, Database, ArrowLeft, Save, File, X, Plus,
 } from "lucide-react";
 import masterDataJson from "@/data/masterData.json";
 
@@ -206,7 +206,8 @@ export default function CitaEditor() {
   const [status, setStatus] = useState("");
   const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
   const [loadingCita, setLoadingCita] = useState(true);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [draggingOver, setDraggingOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load cita data
   useEffect(() => {
@@ -266,38 +267,46 @@ export default function CitaEditor() {
     if (data) setSavedFiles(data as SavedFile[]);
   }, [id, user]);
 
-  const handleProcess = useCallback(async () => {
-    const files = Array.from(pdfInputRef.current?.files || []);
-    if (!files.length) { toast.error("Selecciona al menos un PDF."); return; }
-    if (!fecha) { toast.error("Selecciona la fecha de despacho."); return; }
+  const processFiles = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    if (!fecha) { toast.error("Selecciona la fecha de despacho primero."); return; }
 
     const fechaTexto = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
     setProcessing(true);
     try {
-      const allRows: OCRow[] = [];
-      const allOcs = new Set<string>();
-      let counter = 1;
+      const newRows: OCRow[] = [];
+      const newOcs = new Set<string>();
+      // Start counter after existing rows
+      let counter = rows.length + 1;
       for (let i = 0; i < files.length; i++) {
         setStatus(`Leyendo PDF ${i + 1}/${files.length}…`);
         const text = await readPdfText(files[i]);
         const { oc, rows: parsed } = extractRows(text, fecha, fechaTexto, counter);
-        if (oc) allOcs.add(oc);
-        allRows.push(...parsed);
+        if (oc) newOcs.add(oc);
+        newRows.push(...parsed);
         counter += parsed.length;
 
         // Save each PDF to storage
         await uploadFile(files[i], files[i].name, "pdf_oc");
       }
-      setRows(allRows);
-      setOcs(allOcs);
-      setStatus(`${allRows.length} ítems de ${allOcs.size} OC(s)`);
 
-      // Auto-set name from PDF filenames and OC numbers
-      if (!citaName) {
-        const pdfNames = files.map((f) => f.name.replace(/\.pdf$/i, "")).join(", ");
-        const ocLabel = allOcs.size > 0 ? `OC ${Array.from(allOcs).join(", ")}` : "";
-        setCitaName(ocLabel || pdfNames);
+      // Accumulate rows and OCs
+      setRows((prev) => [...prev, ...newRows]);
+      setOcs((prev) => {
+        const merged = new Set(prev);
+        newOcs.forEach((o) => merged.add(o));
+        return merged;
+      });
+      setStatus(`${rows.length + newRows.length} ítems de ${ocs.size + newOcs.size} OC(s)`);
+
+      // Auto-set name
+      if (!citaName && newOcs.size > 0) {
+        setCitaName(`OC ${Array.from(newOcs).join(", ")}`);
+      } else if (!citaName) {
+        setCitaName(files.map((f) => f.name.replace(/\.pdf$/i, "")).join(", "));
       }
+
+      toast.success(`${newRows.length} ítems procesados de ${files.length} PDF(s)`);
     } catch (e) {
       console.error(e);
       toast.error("Error procesando PDFs.");
@@ -305,7 +314,20 @@ export default function CitaEditor() {
     } finally {
       setProcessing(false);
     }
-  }, [fecha, citaName, uploadFile]);
+  }, [fecha, citaName, uploadFile, rows.length, ocs.size]);
+
+  const handleFileDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDraggingOver(false);
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf");
+    if (files.length) processFiles(files);
+  }, [processFiles]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length) processFiles(files);
+    e.target.value = ""; // reset so same file can be re-selected
+  }, [processFiles]);
 
   const handleExport = useCallback(async () => {
     if (!rows.length) return;
@@ -395,7 +417,7 @@ export default function CitaEditor() {
 
       {/* Toolbar */}
       <Card>
-        <CardContent className="pt-5">
+        <CardContent className="pt-5 space-y-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">Fecha de despacho</label>
@@ -411,26 +433,54 @@ export default function CitaEditor() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="min-w-0 flex-1">
-              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                <FileText className="h-3.5 w-3.5" /> PDFs de OC
-              </label>
-              <Input ref={pdfInputRef} type="file" accept=".pdf" multiple className="text-sm" />
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={handleProcess} disabled={processing}>
-                {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                Procesar
-              </Button>
-              <Button onClick={handleExport} disabled={!rows.length || exporting} variant="secondary">
-                {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                Excel
-              </Button>
-            </div>
+            <Button onClick={handleExport} disabled={!rows.length || exporting} variant="secondary">
+              {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              Exportar Excel
+            </Button>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+
+          {/* Drag & drop zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
+            onDragLeave={() => setDraggingOver(false)}
+            onDrop={handleFileDrop}
+            onClick={() => !processing && fileInputRef.current?.click()}
+            className={cn(
+              "relative flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors",
+              draggingOver
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-primary/50 hover:bg-muted/30",
+              processing && "pointer-events-none opacity-60"
+            )}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              multiple
+              className="hidden"
+              onChange={handleFileInput}
+            />
+            {processing ? (
+              <>
+                <Loader2 className="mb-2 h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm font-medium text-foreground">{status || "Procesando…"}</p>
+              </>
+            ) : (
+              <>
+                <Upload className="mb-2 h-8 w-8 text-muted-foreground/60" />
+                <p className="text-sm font-medium text-foreground">
+                  Arrastra PDFs de OC aquí o haz clic para seleccionar
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Se procesarán automáticamente · Puedes agregar más PDFs sin perder los anteriores
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="text-xs"><Database className="mr-1 h-3 w-3" />{MASTER_SIZE} productos</Badge>
-            {status && <span className="text-xs text-muted-foreground">{status}</span>}
             {rows.length > 0 && (
               <>
                 <Badge variant="secondary" className="text-xs">OCs: {ocs.size}</Badge>
@@ -548,7 +598,7 @@ export default function CitaEditor() {
       ) : !processing && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FileSpreadsheet className="mb-3 h-10 w-10 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Selecciona fecha, sube PDFs de OC y haz clic en Procesar.</p>
+          <p className="text-sm text-muted-foreground">Selecciona fecha y arrastra tus PDFs de OC arriba para empezar.</p>
         </div>
       )}
     </div>
