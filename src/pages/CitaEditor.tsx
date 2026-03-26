@@ -214,6 +214,7 @@ export default function CitaEditor() {
   const [draggingOver, setDraggingOver] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load cita data
