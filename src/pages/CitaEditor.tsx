@@ -68,6 +68,22 @@ function numOrEmpty(v: unknown) { if (v === 0 || v === "0") return 0; const n = 
 function decOrEmpty(v: unknown) { return toNumber3(v) ?? undefined; }
 function strOrEmpty(v: unknown) { if (v == null) return undefined; const s = String(v).trim(); return s || undefined; }
 
+function normalizeCitaNameFromFileName(fileName: string) {
+  return fileName
+    .replace(/\.pdf$/i, "")
+    .replace(/^O\.?\s*C\.?\s*/i, "")
+    .replace(/^OC\s*/i, "")
+    .trim();
+}
+
+function deriveCitaNameFromSavedFiles(files: SavedFile[]) {
+  const latestPdf = files
+    .filter((f) => f.file_type === "pdf_oc")
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+  return latestPdf ? normalizeCitaNameFromFileName(latestPdf.file_name) : "";
+}
+
 // ─── Embedded master ───
 const MASTER = masterDataJson as Record<string, MasterEntry>;
 const MASTER_SIZE = Object.keys(MASTER).length;
@@ -226,13 +242,18 @@ export default function CitaEditor() {
         supabase.from("citas").select("*").eq("id", id).single(),
         supabase.from("cita_files").select("*").eq("cita_id", id).order("created_at", { ascending: false }),
       ]);
+
+      const loadedFiles = (filesRes.data as SavedFile[]) || [];
+      if (loadedFiles.length) setSavedFiles(loadedFiles);
+
       if (citaRes.data) {
-        setCitaName(citaRes.data.name || "");
+        const dbName = (citaRes.data.name || "").trim();
+        setCitaName(dbName || deriveCitaNameFromSavedFiles(loadedFiles));
         if (citaRes.data.fecha_despacho) {
           setFecha(new Date(citaRes.data.fecha_despacho + "T00:00:00"));
         }
       }
-      if (filesRes.data) setSavedFiles(filesRes.data as SavedFile[]);
+
       setLoadingCita(false);
       initialLoadDone.current = true;
     })();
@@ -242,10 +263,11 @@ export default function CitaEditor() {
   const saveCita = useCallback(async () => {
     if (!id || !user) return;
     setSaving(true);
+    const finalName = citaName.trim() || deriveCitaNameFromSavedFiles(savedFiles) || null;
     const { error } = await supabase
       .from("citas")
       .update({
-        name: citaName || null,
+        name: finalName,
         fecha_despacho: fecha ? format(fecha, "yyyy-MM-dd") : null,
         ocs_count: ocs.size,
         items_count: rows.length,
@@ -255,16 +277,19 @@ export default function CitaEditor() {
     setSaving(false);
     if (error) toast.error("Error guardando");
     else toast.success("Cita guardada");
-  }, [id, user, citaName, fecha, ocs, rows]);
+  }, [id, user, citaName, fecha, ocs, rows, savedFiles]);
 
   // Auto-save when data changes (after initial load)
   useEffect(() => {
     if (!initialLoadDone.current || !id || !user) return;
     const timer = setTimeout(async () => {
+      const finalName = citaName.trim() || deriveCitaNameFromSavedFiles(savedFiles);
+      if (!finalName && !fecha && rows.length === 0 && ocs.size === 0) return;
+
       await supabase
         .from("citas")
         .update({
-          name: citaName || null,
+          name: finalName || null,
           fecha_despacho: fecha ? format(fecha, "yyyy-MM-dd") : null,
           ocs_count: ocs.size,
           items_count: rows.length,
@@ -273,7 +298,7 @@ export default function CitaEditor() {
         .eq("id", id);
     }, 1000);
     return () => clearTimeout(timer);
-  }, [citaName, fecha, ocs, rows, id, user]);
+  }, [citaName, fecha, ocs, rows, id, user, savedFiles]);
 
 
   const uploadFile = useCallback(async (file: File | Blob, fileName: string, fileType: string) => {
@@ -334,7 +359,7 @@ export default function CitaEditor() {
       if (!citaName && newOcs.size > 0) {
         setCitaName(Array.from(newOcs).join(", "));
       } else if (!citaName) {
-        setCitaName(files.map((f) => f.name.replace(/\.pdf$/i, "").replace(/^O\.?C\.?\s*/i, "").trim()).join(", "));
+        setCitaName(files.map((f) => normalizeCitaNameFromFileName(f.name)).join(", "));
       }
 
       toast.success(`${newRows.length} ítems procesados de ${files.length} PDF(s)`);
