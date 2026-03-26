@@ -601,16 +601,13 @@ export default function CitaEditor() {
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">Hora de entrega</label>
               <Select value={horaEntrega} onValueChange={setHoraEntrega}>
-                <SelectTrigger className="w-[130px]">
+                <SelectTrigger className="w-[200px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({ length: 13 }, (_, i) => {
-                    const h = String(6 + i).padStart(2, "0");
-                    return (
-                      <SelectItem key={h} value={`${h}:00`}>{`${h}:00`}</SelectItem>
-                    );
-                  })}
+                  {["07:00:00 - 07:10:00", "08:00:00 - 08:10:00", "09:00:00 - 09:10:00", "10:00:00 - 10:10:00", "11:00:00 - 11:10:00", "12:00:00 - 12:10:00", "13:00:00 - 13:10:00"].map((slot) => (
+                    <SelectItem key={slot} value={slot}>{slot}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
