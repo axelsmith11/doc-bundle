@@ -14,8 +14,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   Upload, FileSpreadsheet, Loader2, Trash2, Download, FileText,
-  CalendarIcon, Database, ArrowLeft, Save, File, X, Plus, Minus, CheckSquare,
+  CalendarIcon, Database, ArrowLeft, Save, File, X, Plus, Minus, CheckSquare, Send,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -231,6 +232,8 @@ export default function CitaEditor() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [horaEntrega, setHoraEntrega] = useState("08:00");
+  const [generatingCita, setGeneratingCita] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialLoadDone = useRef(false);
 
@@ -410,6 +413,44 @@ export default function CitaEditor() {
     }
   }, [fecha, rows.length, processing]);
 
+  // ─── Generar Cita (send to n8n) ───
+  const handleGenerarCita = useCallback(async () => {
+    if (!rows.length) { toast.error("No hay ítems para generar la cita"); return; }
+    if (!fecha) { toast.error("Selecciona la fecha de despacho"); return; }
+    setGeneratingCita(true);
+    try {
+      const buf = await buildExcelBuffer(rows);
+      const uint8 = new Uint8Array(buf as ArrayBuffer);
+      let binary = "";
+      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+      const excelBase64 = btoa(binary);
+      const excelFileName = `OCs_${citaName || Date.now()}.xlsx`;
+
+      const { data, error } = await supabase.functions.invoke("trigger-n8n-cita", {
+        body: {
+          citaId: id,
+          citaName,
+          fechaDespacho: format(fecha, "yyyy-MM-dd"),
+          horaEntrega,
+          excelBase64,
+          excelFileName,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.success) {
+        toast.success("Cita enviada a Tai Loy exitosamente");
+      } else {
+        throw new Error(data?.error || "Error desconocido");
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(`Error generando cita: ${e.message || "Error desconocido"}`);
+    } finally {
+      setGeneratingCita(false);
+    }
+  }, [rows, fecha, citaName, horaEntrega, id]);
+
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDraggingOver(false);
@@ -557,9 +598,29 @@ export default function CitaEditor() {
                 </PopoverContent>
               </Popover>
             </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Hora de entrega</label>
+              <Select value={horaEntrega} onValueChange={setHoraEntrega}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 13 }, (_, i) => {
+                    const h = String(6 + i).padStart(2, "0");
+                    return (
+                      <SelectItem key={h} value={`${h}:00`}>{`${h}:00`}</SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
             <Button onClick={handleExport} disabled={!rows.length || exporting} variant="secondary">
               {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
               Exportar Excel
+            </Button>
+            <Button onClick={handleGenerarCita} disabled={!rows.length || !fecha || generatingCita}>
+              {generatingCita ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Generar Cita
             </Button>
           </div>
 
