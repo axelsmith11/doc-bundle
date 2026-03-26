@@ -359,7 +359,7 @@ export default function CitaEditor() {
       if (!citaName && newOcs.size > 0) {
         setCitaName(Array.from(newOcs).join(", "));
       } else if (!citaName) {
-        setCitaName(files.map((f) => f.name.replace(/\.pdf$/i, "").replace(/^O\.?C\.?\s*/i, "").trim()).join(", "));
+        setCitaName(files.map((f) => normalizeCitaNameFromFileName(f.name)).join(", "));
       }
 
       toast.success(`${newRows.length} ítems procesados de ${files.length} PDF(s)`);
