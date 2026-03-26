@@ -216,6 +216,7 @@ export default function CitaEditor() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialLoadDone = useRef(false);
 
   // Load cita data
   useEffect(() => {
