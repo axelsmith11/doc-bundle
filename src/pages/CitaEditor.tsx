@@ -371,6 +371,36 @@ export default function CitaEditor() {
 
   const handleDelete = useCallback((idx: number) => {
     setRows((prev) => prev.filter((_, i) => i !== idx).map((r, i) => ({ ...r, item: i + 1 })));
+    setSelected(new Set());
+  }, []);
+
+  const toggleSelect = useCallback((idx: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelected((prev) => prev.size === rows.length ? new Set() : new Set(rows.map((_, i) => i)));
+  }, [rows.length]);
+
+  const handleBulkDelete = useCallback(() => {
+    setRows((prev) => prev.filter((_, i) => !selected.has(i)).map((r, i) => ({ ...r, item: i + 1 })));
+    setSelected(new Set());
+    setShowDeleteConfirm(false);
+    toast.success(`${selected.size} ítem(s) eliminado(s)`);
+  }, [selected]);
+
+  const handleQtyIncrement = useCallback((idx: number, delta: number) => {
+    setRows((prev) => {
+      const u = [...prev]; const r = { ...u[idx] };
+      r.cantidad = Math.max(0, r.cantidad + delta);
+      const upc = Number(r.undCajaMaster);
+      r.cantCajasMaster = upc === 0 ? 0 : (Number.isFinite(upc) && upc > 0 ? Math.trunc(r.cantidad / upc) : null);
+      u[idx] = r; return u;
+    });
   }, []);
 
   const handleDownloadFile = useCallback(async (sf: SavedFile) => {
