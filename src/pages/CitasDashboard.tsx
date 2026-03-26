@@ -159,22 +159,46 @@ export default function CitasDashboard() {
                     </span>
                   </div>
                 </div>
-                <Badge
-                  variant={cita.status === "completed" ? "default" : "secondary"}
-                  className="ml-3 shrink-0"
-                >
-                  {cita.status === "completed" ? (
-                    <CheckCircle2 className="mr-1 h-3 w-3" />
-                  ) : (
-                    <Clock className="mr-1 h-3 w-3" />
-                  )}
-                  {cita.status === "completed" ? "Completada" : "Borrador"}
-                </Badge>
+                <div className="flex items-center gap-2 ml-3 shrink-0">
+                  <Badge variant={cita.status === "completed" ? "default" : "secondary"}>
+                    {cita.status === "completed" ? (
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                    ) : (
+                      <Clock className="mr-1 h-3 w-3" />
+                    )}
+                    {cita.status === "completed" ? "Completada" : "Borrador"}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(cita.id); }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar cita?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminarán permanentemente la cita y todos sus archivos asociados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={deleteCita} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
