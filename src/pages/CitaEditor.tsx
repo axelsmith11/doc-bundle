@@ -581,16 +581,26 @@ export default function CitaEditor() {
                   <p className="mb-1.5 text-xs font-medium text-muted-foreground">PDFs de OC</p>
                   <div className="space-y-1">
                     {pdfFiles.map((f) => (
-                      <div key={f.id} className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5">
-                        <FileText className="h-3.5 w-3.5 shrink-0 text-red-500" />
-                        <button onClick={() => handleDownloadFile(f)} className="min-w-0 flex-1 truncate text-left text-xs text-foreground hover:underline">
+                      <div key={f.id} className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2">
+                        <FileText className="h-4 w-4 shrink-0 text-destructive" />
+                        <button onClick={() => handleDownloadFile(f)} className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:underline">
                           {f.file_name}
                         </button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 shrink-0 text-xs"
+                          onClick={() => reprocessSavedPdf(f)}
+                          disabled={processing}
+                        >
+                          <Upload className="mr-1 h-3 w-3" />
+                          Procesar
+                        </Button>
                         <span className="shrink-0 text-[10px] text-muted-foreground">
                           {new Date(f.created_at).toLocaleDateString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                         </span>
                         <button onClick={() => handleDeleteFile(f)} className="shrink-0 text-muted-foreground hover:text-destructive">
-                          <X className="h-3 w-3" />
+                          <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     ))}
