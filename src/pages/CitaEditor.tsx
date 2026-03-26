@@ -232,7 +232,7 @@ export default function CitaEditor() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [horaEntrega, setHoraEntrega] = useState("08:00");
+  const [horaEntrega, setHoraEntrega] = useState("08:00:00 - 08:10:00");
   const [generatingCita, setGeneratingCita] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialLoadDone = useRef(false);
