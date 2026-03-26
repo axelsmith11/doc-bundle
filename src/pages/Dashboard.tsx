@@ -1,30 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  Plus,
-  Search,
-  FileArchive,
-  Clock,
-  CheckCircle2,
-  Loader2,
-  Trash2,
+  Plus, Search, FileArchive, Clock, CheckCircle2, Loader2, Trash2, CalendarIcon, X,
 } from "lucide-react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -36,6 +29,7 @@ export default function Dashboard() {
   const [processes, setProcesses] = useState<Process[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState<Date>();
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
@@ -50,7 +44,7 @@ export default function Dashboard() {
     const { data, error } = await supabase
       .from("processes")
       .select("*")
-      .order("updated_at", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (error) toast.error("Error cargando procesos");
     else setProcesses(data || []);
@@ -73,7 +67,6 @@ export default function Dashboard() {
 
   const deleteProcess = async () => {
     if (!deleteTarget) return;
-    // Delete files from storage
     const { data: files } = await supabase
       .from("process_files")
       .select("storage_path")
@@ -88,13 +81,17 @@ export default function Dashboard() {
     toast.success("Proceso eliminado");
   };
 
-  const filtered = processes.filter(
-    (p) => !search || (p.invoice_name ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = processes.filter((p) => {
+    if (search && !(p.invoice_name ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+    if (dateFilter) {
+      const created = new Date(p.created_at).toDateString();
+      if (created !== dateFilter.toDateString()) return false;
+    }
+    return true;
+  });
 
   return (
     <div>
-      {/* Top bar */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Mis facturas</h1>
@@ -108,18 +105,46 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nombre de factura…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre de factura…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn("w-[200px] justify-start text-left font-normal", !dateFilter && "text-muted-foreground")}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateFilter ? format(dateFilter, "dd MMM yyyy", { locale: es }) : "Filtrar por fecha"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={dateFilter}
+                onSelect={setDateFilter}
+                initialFocus
+                locale={es}
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          {dateFilter && (
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setDateFilter(undefined)}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* List */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -128,7 +153,7 @@ export default function Dashboard() {
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <FileArchive className="mb-3 h-10 w-10 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
-            {search ? "No se encontraron procesos" : "Aún no tienes procesos. ¡Crea el primero!"}
+            {search || dateFilter ? "No se encontraron procesos" : "Aún no tienes procesos. ¡Crea el primero!"}
           </p>
         </div>
       ) : (
@@ -145,7 +170,7 @@ export default function Dashboard() {
                     {process.invoice_name || "Sin nombre"}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Actualizado {new Date(process.updated_at).toLocaleDateString("es-PE", {
+                    {new Date(process.created_at).toLocaleDateString("es-PE", {
                       day: "numeric", month: "short", year: "numeric",
                       hour: "2-digit", minute: "2-digit",
                     })}
