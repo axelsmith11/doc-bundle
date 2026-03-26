@@ -363,7 +363,7 @@ export default function CitaEditor() {
     } finally {
       setProcessing(false);
     }
-  }, [fecha, rows.length]);
+  }, [fecha, rows.length, processing]);
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
