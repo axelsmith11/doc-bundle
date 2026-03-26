@@ -312,9 +312,9 @@ export default function CitaEditor() {
       setStatus(`${rows.length + newRows.length} ítems de ${ocs.size + newOcs.size} OC(s)`);
 
       if (!citaName && newOcs.size > 0) {
-        setCitaName(`OC ${Array.from(newOcs).join(", ")}`);
+        setCitaName(Array.from(newOcs).join(", "));
       } else if (!citaName) {
-        setCitaName(files.map((f) => f.name.replace(/\.pdf$/i, "")).join(", "));
+        setCitaName(files.map((f) => f.name.replace(/\.pdf$/i, "").replace(/^O\.?C\.?\s*/i, "").trim()).join(", "));
       }
 
       toast.success(`${newRows.length} ítems procesados de ${files.length} PDF(s)`);
