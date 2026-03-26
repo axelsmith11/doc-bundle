@@ -598,7 +598,7 @@ export default function CitaEditor() {
       ) : !processing && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FileSpreadsheet className="mb-3 h-10 w-10 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Selecciona fecha, sube PDFs de OC y haz clic en Procesar.</p>
+          <p className="text-sm text-muted-foreground">Selecciona fecha y arrastra tus PDFs de OC arriba para empezar.</p>
         </div>
       )}
     </div>
