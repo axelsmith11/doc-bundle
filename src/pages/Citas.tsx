@@ -42,11 +42,18 @@ interface OCRow {
   ean14: string | number;
 }
 
-interface MasterData {
-  loaded: boolean;
-  rows: Record<string, unknown>[];
-  headerMap: Record<string, string>;
-  map: Map<string, Record<string, unknown>>;
+interface MasterEntry {
+  undCajaMaster: number | null;
+  cantPaletas: number | null;
+  prodConVenc: number | null;
+  prodNuevo: number | null;
+  ean13: number | null;
+  altoCm: number | null;
+  anchoCm: number | null;
+  largoCm: number | null;
+  volumenCm3: number | null;
+  pesoKg: number | null;
+  ean14: number | null;
 }
 
 // ─── Helpers ───
