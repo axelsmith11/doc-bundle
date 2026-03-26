@@ -7,7 +7,8 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ProcessEditor from "./pages/ProcessEditor";
-import Citas from "./pages/Citas";
+import CitasDashboard from "./pages/CitasDashboard";
+import CitaEditor from "./pages/CitaEditor";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -16,30 +17,14 @@ const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
+  if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (!user) return <Navigate to="/login" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
+  if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (user) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -49,7 +34,8 @@ const AppRoutes = () => (
     <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
     <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
     <Route path="/proceso/:id" element={<ProtectedRoute><ProcessEditor /></ProtectedRoute>} />
-    <Route path="/citas" element={<ProtectedRoute><Citas /></ProtectedRoute>} />
+    <Route path="/citas" element={<ProtectedRoute><CitasDashboard /></ProtectedRoute>} />
+    <Route path="/cita/:id" element={<ProtectedRoute><CitaEditor /></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
