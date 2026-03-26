@@ -206,7 +206,8 @@ export default function CitaEditor() {
   const [status, setStatus] = useState("");
   const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
   const [loadingCita, setLoadingCita] = useState(true);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [draggingOver, setDraggingOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load cita data
   useEffect(() => {
