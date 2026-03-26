@@ -338,6 +338,7 @@ export default function CitaEditor() {
 
   // Re-process a saved PDF from storage
   const reprocessSavedPdf = useCallback(async (sf: SavedFile) => {
+    if (processing) return;
     if (!fecha) {
       toast.info("Selecciona la fecha de despacho primero.");
       return;
