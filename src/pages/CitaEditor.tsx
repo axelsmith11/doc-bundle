@@ -267,38 +267,46 @@ export default function CitaEditor() {
     if (data) setSavedFiles(data as SavedFile[]);
   }, [id, user]);
 
-  const handleProcess = useCallback(async () => {
-    const files = Array.from(pdfInputRef.current?.files || []);
-    if (!files.length) { toast.error("Selecciona al menos un PDF."); return; }
-    if (!fecha) { toast.error("Selecciona la fecha de despacho."); return; }
+  const processFiles = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    if (!fecha) { toast.error("Selecciona la fecha de despacho primero."); return; }
 
     const fechaTexto = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
     setProcessing(true);
     try {
-      const allRows: OCRow[] = [];
-      const allOcs = new Set<string>();
-      let counter = 1;
+      const newRows: OCRow[] = [];
+      const newOcs = new Set<string>();
+      // Start counter after existing rows
+      let counter = rows.length + 1;
       for (let i = 0; i < files.length; i++) {
         setStatus(`Leyendo PDF ${i + 1}/${files.length}…`);
         const text = await readPdfText(files[i]);
         const { oc, rows: parsed } = extractRows(text, fecha, fechaTexto, counter);
-        if (oc) allOcs.add(oc);
-        allRows.push(...parsed);
+        if (oc) newOcs.add(oc);
+        newRows.push(...parsed);
         counter += parsed.length;
 
         // Save each PDF to storage
         await uploadFile(files[i], files[i].name, "pdf_oc");
       }
-      setRows(allRows);
-      setOcs(allOcs);
-      setStatus(`${allRows.length} ítems de ${allOcs.size} OC(s)`);
 
-      // Auto-set name from PDF filenames and OC numbers
-      if (!citaName) {
-        const pdfNames = files.map((f) => f.name.replace(/\.pdf$/i, "")).join(", ");
-        const ocLabel = allOcs.size > 0 ? `OC ${Array.from(allOcs).join(", ")}` : "";
-        setCitaName(ocLabel || pdfNames);
+      // Accumulate rows and OCs
+      setRows((prev) => [...prev, ...newRows]);
+      setOcs((prev) => {
+        const merged = new Set(prev);
+        newOcs.forEach((o) => merged.add(o));
+        return merged;
+      });
+      setStatus(`${rows.length + newRows.length} ítems de ${ocs.size + newOcs.size} OC(s)`);
+
+      // Auto-set name
+      if (!citaName && newOcs.size > 0) {
+        setCitaName(`OC ${Array.from(newOcs).join(", ")}`);
+      } else if (!citaName) {
+        setCitaName(files.map((f) => f.name.replace(/\.pdf$/i, "")).join(", "));
       }
+
+      toast.success(`${newRows.length} ítems procesados de ${files.length} PDF(s)`);
     } catch (e) {
       console.error(e);
       toast.error("Error procesando PDFs.");
@@ -306,7 +314,20 @@ export default function CitaEditor() {
     } finally {
       setProcessing(false);
     }
-  }, [fecha, citaName, uploadFile]);
+  }, [fecha, citaName, uploadFile, rows.length, ocs.size]);
+
+  const handleFileDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDraggingOver(false);
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf");
+    if (files.length) processFiles(files);
+  }, [processFiles]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length) processFiles(files);
+    e.target.value = ""; // reset so same file can be re-selected
+  }, [processFiles]);
 
   const handleExport = useCallback(async () => {
     if (!rows.length) return;
