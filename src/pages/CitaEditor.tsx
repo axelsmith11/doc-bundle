@@ -14,8 +14,13 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   Upload, FileSpreadsheet, Loader2, Trash2, Download, FileText,
-  CalendarIcon, Database, ArrowLeft, Save, File, X, Plus,
+  CalendarIcon, Database, ArrowLeft, Save, File, X, Plus, Minus, CheckSquare,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import masterDataJson from "@/data/masterData.json";
 
 // ─── Types ───
