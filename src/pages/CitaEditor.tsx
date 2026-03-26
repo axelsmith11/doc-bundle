@@ -68,6 +68,22 @@ function numOrEmpty(v: unknown) { if (v === 0 || v === "0") return 0; const n = 
 function decOrEmpty(v: unknown) { return toNumber3(v) ?? undefined; }
 function strOrEmpty(v: unknown) { if (v == null) return undefined; const s = String(v).trim(); return s || undefined; }
 
+function normalizeCitaNameFromFileName(fileName: string) {
+  return fileName
+    .replace(/\.pdf$/i, "")
+    .replace(/^O\.?\s*C\.?\s*/i, "")
+    .replace(/^OC\s*/i, "")
+    .trim();
+}
+
+function deriveCitaNameFromSavedFiles(files: SavedFile[]) {
+  const latestPdf = files
+    .filter((f) => f.file_type === "pdf_oc")
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+  return latestPdf ? normalizeCitaNameFromFileName(latestPdf.file_name) : "";
+}
+
 // ─── Embedded master ───
 const MASTER = masterDataJson as Record<string, MasterEntry>;
 const MASTER_SIZE = Object.keys(MASTER).length;
