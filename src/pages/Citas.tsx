@@ -1,199 +1,111 @@
 import { useState, useCallback, useRef } from "react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  Upload,
-  FileSpreadsheet,
-  Loader2,
-  Trash2,
-  Download,
-  CalendarDays,
-  FileText,
-  Database,
+  Upload, FileSpreadsheet, Loader2, Trash2, Download,
+  FileText, CalendarIcon, Database,
 } from "lucide-react";
 import masterDataJson from "@/data/masterData.json";
 
 // ─── Types ───
 interface OCRow {
-  item: number;
-  carro: number;
-  tn: number;
-  oc: string;
-  fechaDate: Date;
-  fechaTexto: string;
-  codigo: string;
-  descripcion: string;
-  umb: string;
-  cantidad: number;
-  undCajaMaster: number | string;
-  cantCajasMaster: number | string | null;
-  cantPaletas: string;
-  prodConVenc: string | number;
-  prodNuevo: string | number;
-  ean13: string | number;
-  altoCm: number | string;
-  anchoCm: number | string;
-  largoCm: number | string;
-  volumenCm3: number | string;
-  pesoKg: number | string;
+  item: number; carro: number; tn: number; oc: string;
+  fechaDate: Date; fechaTexto: string; codigo: string; descripcion: string;
+  umb: string; cantidad: number;
+  undCajaMaster: number | string; cantCajasMaster: number | string | null;
+  cantPaletas: string; prodConVenc: string | number; prodNuevo: string | number;
+  ean13: string | number; altoCm: number | string; anchoCm: number | string;
+  largoCm: number | string; volumenCm3: number | string; pesoKg: number | string;
   ean14: string | number;
 }
 
 interface MasterEntry {
-  undCajaMaster: number | null;
-  cantPaletas: number | null;
-  prodConVenc: number | null;
-  prodNuevo: number | null;
-  ean13: number | null;
-  altoCm: number | null;
-  anchoCm: number | null;
-  largoCm: number | null;
-  volumenCm3: number | null;
-  pesoKg: number | null;
-  ean14: number | null;
+  undCajaMaster: number | null; cantPaletas: number | null;
+  prodConVenc: number | null; prodNuevo: number | null; ean13: number | null;
+  altoCm: number | null; anchoCm: number | null; largoCm: number | null;
+  volumenCm3: number | null; pesoKg: number | null; ean14: number | null;
 }
 
 // ─── Helpers ───
 function toNumber3(v: unknown): number | undefined {
   if (v === null || v === undefined || v === "") return undefined;
   let s = String(v).trim().replace(/\u00A0/g, "");
-  const hasComma = /,/.test(s);
-  const hasDot = /\./.test(s);
-  if (hasComma && !hasDot) {
-    s = s.replace(/\./g, "");
-    s = s.replace(",", ".");
-  } else if (!hasComma && hasDot) {
-    if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
-  } else {
-    s = s.replace(/,/g, "");
-  }
+  const hasComma = /,/.test(s), hasDot = /\./.test(s);
+  if (hasComma && !hasDot) { s = s.replace(/\./g, "").replace(",", "."); }
+  else if (!hasComma && hasDot && /^\d{1,3}(\.\d{3})+$/.test(s)) { s = s.replace(/\./g, ""); }
+  else { s = s.replace(/,/g, ""); }
   const n = Number(s);
   return Number.isFinite(n) ? n : undefined;
 }
-
-function fmt3(v: unknown): string {
-  const n = toNumber3(v);
-  return Number.isFinite(n) ? n!.toFixed(3) : "";
-}
-function fmt2(v: unknown): string {
-  const n = toNumber3(v);
-  return Number.isFinite(n) ? n!.toFixed(2) : "";
-}
-function fmtMiles0(v: unknown): string {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "";
-  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-}
-
-function numOrEmpty(v: unknown): number | undefined {
-  if (v === 0 || v === "0") return 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
-}
-function decOrEmpty(v: unknown): number | undefined {
-  const n = toNumber3(v);
-  return Number.isFinite(n) ? n : undefined;
-}
-function strOrEmpty(v: unknown): string | undefined {
-  if (v === null || v === undefined) return undefined;
-  const s = String(v).trim();
-  return s.length ? s : undefined;
-}
-
-const PAD_EPOCH = new Date(Date.UTC(1899, 11, 30));
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-function excelSerialToDate(serial: number): Date {
-  const ms = Math.round(serial) * MS_PER_DAY;
-  return new Date(PAD_EPOCH.getTime() + ms);
-}
+function fmt3(v: unknown) { const n = toNumber3(v); return n != null ? n.toFixed(3) : ""; }
+function fmt2(v: unknown) { const n = toNumber3(v); return n != null ? n.toFixed(2) : ""; }
+function fmtMiles0(v: unknown) { const n = Number(v); return Number.isFinite(n) ? String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".") : ""; }
+function numOrEmpty(v: unknown) { if (v === 0 || v === "0") return 0; const n = Number(v); return Number.isFinite(n) ? n : undefined; }
+function decOrEmpty(v: unknown) { return toNumber3(v) ?? undefined; }
+function strOrEmpty(v: unknown) { if (v == null) return undefined; const s = String(v).trim(); return s || undefined; }
 
 // ─── Embedded master ───
-const MASTER_MAP: Record<string, MasterEntry> = masterDataJson as Record<string, MasterEntry>;
-const MASTER_SIZE = Object.keys(MASTER_MAP).length;
+const MASTER = masterDataJson as Record<string, MasterEntry>;
+const MASTER_SIZE = Object.keys(MASTER).length;
 
 // ─── PDF parsing ───
 async function readPdfText(file: File): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist");
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const ab = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
   let text = "";
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const pageText = content.items.map((it: any) => it.str).join(" ");
-    text += pageText + "\n";
+    text += content.items.map((it: any) => it.str).join(" ") + "\n";
   }
   return text;
 }
 
-function extractRowsFromText(
-  text: string,
-  fechaDate: Date,
-  fechaTexto: string,
-  startItem: number
-): { oc: string; rows: OCRow[] } {
-  const pedidoMatch = /Pedido N[°º]\s+(\d+)/i.exec(text);
-  const oc = pedidoMatch ? pedidoMatch[1] : "";
+function extractRows(text: string, fechaDate: Date, fechaTexto: string, start: number) {
+  const pedido = /Pedido N[°º]\s+(\d+)/i.exec(text);
+  const oc = pedido?.[1] ?? "";
   const re = /(\d{5})\s+(\d+)\s+([\s\S]*?)\s+(\d+\.\d{3})\s+UN/gi;
-
   const rows: OCRow[] = [];
-  let m: RegExpExecArray | null;
-  let counter = startItem;
+  let m: RegExpExecArray | null, c = start;
+
   while ((m = re.exec(text)) !== null) {
     const codigo = String(Number(m[2]));
-    const descripcion = m[3]
-      .replace(/\s+U\.FIJA.*?PALETIZ\./i, "")
-      .replace(/\s+/g, " ")
-      .trim();
+    const desc = m[3].replace(/\s+U\.FIJA.*?PALETIZ\./i, "").replace(/\s+/g, " ").trim();
     const cantidad = Math.round(parseFloat(m[4]));
+    const src = MASTER[codigo];
 
-    // Auto-fill from embedded master
-    const src = MASTER_MAP[codigo];
-    let undCajaMaster: number | string = "";
-    let cantCajasMaster: number | string | null = "";
-    let cantPaletas = "";
-    let prodConVenc: string | number = "";
-    let prodNuevo: string | number = "";
-    let ean13: string | number = "";
-    let altoCm: number | string = "";
-    let anchoCm: number | string = "";
-    let largoCm: number | string = "";
-    let volumenCm3: number | string = "";
-    let pesoKg: number | string = "";
-    let ean14: string | number = "";
+    let undCM: number | string = "", ccm: number | string | null = "", cp = "", pv: string | number = "";
+    let pn: string | number = "", e13: string | number = "", e14: string | number = "";
+    let aC: number | string = "", anC: number | string = "", lC: number | string = "";
+    let vC: number | string = "", pK: number | string = "";
 
     if (src) {
-      undCajaMaster = src.undCajaMaster ?? "";
-      cantPaletas = src.cantPaletas != null ? String(src.cantPaletas) : "";
-      prodConVenc = src.prodConVenc ?? "";
-      prodNuevo = src.prodNuevo ?? "";
-      ean13 = src.ean13 ?? "";
-      ean14 = src.ean14 ?? "";
-      altoCm = src.altoCm ?? "";
-      anchoCm = src.anchoCm ?? "";
-      largoCm = src.largoCm ?? "";
-      volumenCm3 = src.volumenCm3 ?? "";
-      pesoKg = src.pesoKg ?? "";
-
-      const upc = Number(undCajaMaster);
-      if (upc === 0) cantCajasMaster = 0;
-      else if (Number.isFinite(upc) && upc > 0) cantCajasMaster = Math.trunc(cantidad / upc);
-      else cantCajasMaster = null;
+      undCM = src.undCajaMaster ?? "";
+      cp = src.cantPaletas != null ? String(src.cantPaletas) : "";
+      pv = src.prodConVenc ?? ""; pn = src.prodNuevo ?? "";
+      e13 = src.ean13 ?? ""; e14 = src.ean14 ?? "";
+      aC = src.altoCm ?? ""; anC = src.anchoCm ?? ""; lC = src.largoCm ?? "";
+      vC = src.volumenCm3 ?? ""; pK = src.pesoKg ?? "";
+      const u = Number(undCM);
+      ccm = u === 0 ? 0 : (Number.isFinite(u) && u > 0 ? Math.trunc(cantidad / u) : null);
     }
 
     rows.push({
-      item: counter, carro: 1, tn: 2, oc, fechaDate, fechaTexto,
-      codigo, descripcion, umb: "UN", cantidad,
-      undCajaMaster, cantCajasMaster, cantPaletas,
-      prodConVenc, prodNuevo, ean13,
-      altoCm, anchoCm, largoCm, volumenCm3, pesoKg, ean14,
+      item: c++, carro: 1, tn: 2, oc, fechaDate, fechaTexto, codigo, descripcion: desc,
+      umb: "UN", cantidad, undCajaMaster: undCM, cantCajasMaster: ccm, cantPaletas: cp,
+      prodConVenc: pv, prodNuevo: pn, ean13: e13, altoCm: aC, anchoCm: anC, largoCm: lC,
+      volumenCm3: vC, pesoKg: pK, ean14: e14,
     });
-    counter++;
   }
   return { oc, rows };
 }
@@ -203,9 +115,7 @@ async function generarExcel(rows: OCRow[]) {
   const ExcelJS = await import("exceljs");
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("OCs", { views: [{ state: "frozen" as const, ySplit: 1 }] });
-
-  const GREEN = "FF007500";
-  const WHITE = "FFFFFFFF";
+  const G = "FF007500", W = "FFFFFFFF";
 
   ws.columns = [
     { header: "# ITEM", key: "item", width: 8 },
@@ -231,38 +141,25 @@ async function generarExcel(rows: OCRow[]) {
     { header: "EAN 14 CAJA", key: "ean14", width: 16 },
   ];
 
-  const header = ws.getRow(1);
-  header.height = 30;
-  header.eachCell((cell) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREEN } };
-    cell.font = { bold: true, color: { argb: WHITE } };
+  const hdr = ws.getRow(1);
+  hdr.height = 30;
+  hdr.eachCell((cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: G } };
+    cell.font = { bold: true, color: { argb: W } };
     cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
     cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
   });
 
   for (const r of rows) {
     ws.addRow({
-      item: numOrEmpty(r.item),
-      carro: numOrEmpty(1),
-      tn: numOrEmpty(2),
-      oc: numOrEmpty(r.oc),
-      fecha: r.fechaDate,
-      codigo: numOrEmpty(r.codigo),
-      descripcion: strOrEmpty(r.descripcion),
-      umb: "UN",
-      cantidad: numOrEmpty(r.cantidad),
-      undCajaMaster: numOrEmpty(r.undCajaMaster),
-      cantCajasMaster: numOrEmpty(r.cantCajasMaster),
-      cantPaletas: numOrEmpty(r.cantPaletas),
-      prodConVenc: numOrEmpty(r.prodConVenc),
-      prodNuevo: numOrEmpty(r.prodNuevo),
-      ean13: numOrEmpty(r.ean13),
-      altoCm: decOrEmpty(r.altoCm),
-      anchoCm: decOrEmpty(r.anchoCm),
-      largoCm: decOrEmpty(r.largoCm),
-      volumenCm3: numOrEmpty(r.volumenCm3),
-      pesoKg: decOrEmpty(r.pesoKg),
-      ean14: numOrEmpty(r.ean14),
+      item: numOrEmpty(r.item), carro: numOrEmpty(1), tn: numOrEmpty(2),
+      oc: numOrEmpty(r.oc), fecha: r.fechaDate, codigo: numOrEmpty(r.codigo),
+      descripcion: strOrEmpty(r.descripcion), umb: "UN", cantidad: numOrEmpty(r.cantidad),
+      undCajaMaster: numOrEmpty(r.undCajaMaster), cantCajasMaster: numOrEmpty(r.cantCajasMaster),
+      cantPaletas: numOrEmpty(r.cantPaletas), prodConVenc: numOrEmpty(r.prodConVenc),
+      prodNuevo: numOrEmpty(r.prodNuevo), ean13: numOrEmpty(r.ean13),
+      altoCm: decOrEmpty(r.altoCm), anchoCm: decOrEmpty(r.anchoCm), largoCm: decOrEmpty(r.largoCm),
+      volumenCm3: numOrEmpty(r.volumenCm3), pesoKg: decOrEmpty(r.pesoKg), ean14: numOrEmpty(r.ean14),
     });
   }
 
@@ -270,36 +167,26 @@ async function generarExcel(rows: OCRow[]) {
   ws.getColumn("cantidad").numFmt = "0";
   ws.getColumn("undCajaMaster").numFmt = "0";
   ws.getColumn("cantCajasMaster").numFmt = "0";
-  ws.getColumn("altoCm").numFmt = "0.000";
-  ws.getColumn("anchoCm").numFmt = "0.000";
-  ws.getColumn("largoCm").numFmt = "0.000";
+  ["altoCm","anchoCm","largoCm"].forEach(c => ws.getColumn(c).numFmt = "0.000");
   ws.getColumn("volumenCm3").numFmt = "#,##0";
   ws.getColumn("pesoKg").numFmt = "0.00";
   ws.getColumn("ean13").numFmt = "0";
   ws.getColumn("ean14").numFmt = "0";
 
   const last = ws.lastRow?.number ?? 1;
-  const colFecha = ws.getColumn("fecha").number;
-  const rightAligned = new Set([
-    ws.getColumn("cantidad").number,
-    ws.getColumn("codigo").number,
-    ws.getColumn("undCajaMaster").number,
-    ws.getColumn("cantCajasMaster").number,
-    ws.getColumn("volumenCm3").number,
-  ]);
+  const cF = ws.getColumn("fecha").number;
+  const ra = new Set([ws.getColumn("cantidad").number, ws.getColumn("codigo").number,
+    ws.getColumn("undCajaMaster").number, ws.getColumn("cantCajasMaster").number, ws.getColumn("volumenCm3").number]);
 
   for (let r = 2; r <= last; r++) {
     const row = ws.getRow(r);
     row.height = 20;
     row.eachCell((cell, c) => {
       cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
-      if (c === colFecha) {
-        cell.alignment = { vertical: "middle", horizontal: "center" };
-      } else if (rightAligned.has(c)) {
-        cell.alignment = { vertical: "middle", horizontal: "right" };
-      } else {
-        cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-      }
+      cell.alignment = c === cF
+        ? { vertical: "middle", horizontal: "center" }
+        : ra.has(c) ? { vertical: "middle", horizontal: "right" }
+        : { vertical: "middle", horizontal: "left", wrapText: true };
     });
   }
 
@@ -307,11 +194,8 @@ async function generarExcel(rows: OCRow[]) {
   const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = `OCs_${Date.now()}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  a.href = url; a.download = `OCs_${Date.now()}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
@@ -319,31 +203,18 @@ async function generarExcel(rows: OCRow[]) {
 export default function Citas() {
   const [rows, setRows] = useState<OCRow[]>([]);
   const [ocs, setOcs] = useState<Set<string>>(new Set());
-  const [fechaSerial, setFechaSerial] = useState("");
-  const [fechaPicker, setFechaPicker] = useState("");
+  const [fecha, setFecha] = useState<Date>();
   const [processing, setProcessing] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [status, setStatus] = useState(`Maestro embebido: ${MASTER_SIZE} códigos.`);
+  const [status, setStatus] = useState("");
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
-  const handleProcessPdfs = useCallback(async () => {
+  const handleProcess = useCallback(async () => {
     const files = Array.from(pdfInputRef.current?.files || []);
-    if (!files.length) { setStatus("Sube uno o varios PDF primero."); return; }
+    if (!files.length) { toast.error("Selecciona al menos un PDF."); return; }
+    if (!fecha) { toast.error("Selecciona la fecha de despacho."); return; }
 
-    let fechaDate: Date, fechaTexto: string;
-    if (fechaSerial.trim()) {
-      const serial = Number(fechaSerial.trim());
-      if (!Number.isFinite(serial)) { setStatus("El serial debe ser un número."); return; }
-      fechaDate = excelSerialToDate(serial);
-      fechaTexto = `${String(fechaDate.getUTCDate()).padStart(2, "0")}/${String(fechaDate.getUTCMonth() + 1).padStart(2, "0")}/${fechaDate.getFullYear()}`;
-    } else if (fechaPicker.trim()) {
-      const d = new Date(fechaPicker.trim() + "T00:00:00Z");
-      if (isNaN(d.getTime())) { setStatus("Fecha inválida."); return; }
-      fechaDate = d;
-      fechaTexto = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-    } else {
-      setStatus("Elige una fecha (serial o date)."); return;
-    }
+    const fechaTexto = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
 
     setProcessing(true);
     try {
@@ -352,9 +223,9 @@ export default function Citas() {
       let counter = 1;
 
       for (let i = 0; i < files.length; i++) {
-        setStatus(`Leyendo PDF ${i + 1}/${files.length}… (${files[i].name})`);
+        setStatus(`Leyendo PDF ${i + 1}/${files.length}…`);
         const text = await readPdfText(files[i]);
-        const { oc, rows: parsed } = extractRowsFromText(text, fechaDate!, fechaTexto!, counter);
+        const { oc, rows: parsed } = extractRows(text, fecha, fechaTexto, counter);
         if (oc) allOcs.add(oc);
         allRows.push(...parsed);
         counter += parsed.length;
@@ -363,177 +234,141 @@ export default function Citas() {
       setRows(allRows);
       setOcs(allOcs);
       setStatus(allRows.length
-        ? `Listo. ${allRows.length} ítems de ${allOcs.size} OC(s).`
-        : "No se encontraron ítems.");
+        ? `${allRows.length} ítems extraídos de ${allOcs.size} OC(s)`
+        : "No se encontraron ítems en los PDFs.");
     } catch (e) {
       console.error(e);
-      setStatus("Error procesando los PDF(s).");
+      toast.error("Error procesando los PDFs.");
+      setStatus("");
     } finally {
       setProcessing(false);
     }
-  }, [fechaSerial, fechaPicker]);
+  }, [fecha]);
 
-  const handleQuantityChange = useCallback((idx: number, value: string) => {
+  const handleQtyChange = useCallback((idx: number, value: string) => {
     setRows((prev) => {
-      const updated = [...prev];
-      const row = { ...updated[idx] };
+      const u = [...prev];
+      const r = { ...u[idx] };
       const num = parseInt(value, 10);
-      row.cantidad = Number.isFinite(num) && num >= 0 ? num : 0;
-
-      const upc = Number(row.undCajaMaster);
-      if (upc === 0) row.cantCajasMaster = 0;
-      else if (Number.isFinite(upc) && upc > 0) row.cantCajasMaster = Math.trunc(row.cantidad / upc);
-      else row.cantCajasMaster = null;
-
-      updated[idx] = row;
-      return updated;
+      r.cantidad = Number.isFinite(num) && num >= 0 ? num : 0;
+      const upc = Number(r.undCajaMaster);
+      r.cantCajasMaster = upc === 0 ? 0 : (Number.isFinite(upc) && upc > 0 ? Math.trunc(r.cantidad / upc) : null);
+      u[idx] = r;
+      return u;
     });
   }, []);
 
-  const handleDeleteRow = useCallback((idx: number) => {
-    setRows((prev) => {
-      const updated = prev.filter((_, i) => i !== idx);
-      return updated.map((r, i) => ({ ...r, item: i + 1 }));
-    });
+  const handleDelete = useCallback((idx: number) => {
+    setRows((prev) => prev.filter((_, i) => i !== idx).map((r, i) => ({ ...r, item: i + 1 })));
   }, []);
 
   const handleExport = useCallback(async () => {
     if (!rows.length) return;
     setExporting(true);
-    try {
-      await generarExcel(rows);
-      toast.success("Excel generado correctamente");
-    } catch (e) {
-      console.error(e);
-      toast.error("Error generando Excel");
-    } finally {
-      setExporting(false);
-    }
+    try { await generarExcel(rows); toast.success("Excel descargado"); }
+    catch { toast.error("Error generando Excel"); }
+    finally { setExporting(false); }
   }, [rows]);
 
   return (
     <div className="space-y-6">
-      {/* Status */}
-      {status && (
-        <div className="rounded-lg border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
-          {status}
-        </div>
-      )}
-
-      {/* Controls */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Master info */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Database className="h-4 w-4 text-primary" />
-              Maestro de Productos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">
-                <FileSpreadsheet className="mr-1 h-3 w-3" />
-                {MASTER_SIZE} códigos cargados
-              </Badge>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Datos de empaque embebidos (Tai Loy SAP). Se aplican automáticamente al procesar.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Date */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarDays className="h-4 w-4 text-primary" />
-              Fecha de despacho
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Serial Excel</label>
-                <Input
-                  type="number"
-                  placeholder="Ej: 45800"
-                  value={fechaSerial}
-                  onChange={(e) => { setFechaSerial(e.target.value); if (e.target.value) setFechaPicker(""); }}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">o Fecha</label>
-                <Input
-                  type="date"
-                  value={fechaPicker}
-                  onChange={(e) => { setFechaPicker(e.target.value); if (e.target.value) setFechaSerial(""); }}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* PDF upload + actions */}
+      {/* Toolbar */}
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 pt-5">
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">
-              <FileText className="mr-1 inline h-3.5 w-3.5" />
-              PDFs de Órdenes de Compra
-            </label>
-            <Input
-              ref={pdfInputRef}
-              type="file"
-              accept=".pdf"
-              multiple
-              className="text-sm"
-            />
+        <CardContent className="pt-5">
+          <div className="flex flex-wrap items-end gap-4">
+            {/* Date picker */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Fecha de despacho</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-[200px] justify-start text-left font-normal",
+                      !fecha && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {fecha ? format(fecha, "dd/MM/yyyy") : "Seleccionar…"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={fecha}
+                    onSelect={setFecha}
+                    locale={es}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* PDF upload */}
+            <div className="min-w-0 flex-1">
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                <FileText className="h-3.5 w-3.5" />
+                PDFs de Órdenes de Compra
+              </label>
+              <Input
+                ref={pdfInputRef}
+                type="file"
+                accept=".pdf"
+                multiple
+                className="text-sm"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <Button onClick={handleProcess} disabled={processing}>
+                {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                Procesar
+              </Button>
+              <Button onClick={handleExport} disabled={!rows.length || exporting} variant="secondary">
+                {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                Excel
+              </Button>
+            </div>
           </div>
-          <Button onClick={handleProcessPdfs} disabled={processing}>
-            {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-            Procesar PDFs
-          </Button>
-          <Button onClick={handleExport} disabled={!rows.length || exporting} variant="secondary">
-            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-            Exportar Excel
-          </Button>
+
+          {/* Info bar */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="text-xs">
+              <Database className="mr-1 h-3 w-3" />
+              {MASTER_SIZE} productos
+            </Badge>
+            {status && (
+              <span className="text-xs text-muted-foreground">{status}</span>
+            )}
+            {rows.length > 0 && (
+              <>
+                <Badge variant="secondary" className="text-xs">OCs: {ocs.size}</Badge>
+                <Badge variant="secondary" className="text-xs">Ítems: {rows.length}</Badge>
+                <Badge variant="secondary" className="text-xs">
+                  Total: {rows.reduce((a, r) => a + (Number(r.cantidad) || 0), 0)} un.
+                </Badge>
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Summary */}
-      {rows.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary">
-            <FileSpreadsheet className="mr-1 h-3 w-3" />
-            Maestro OK ({MASTER_SIZE})
-          </Badge>
-          <Badge variant="secondary">OCs: {ocs.size}</Badge>
-          <Badge variant="secondary">Ítems: {rows.length}</Badge>
-          <Badge variant="secondary">
-            Cantidad total: {rows.reduce((a, r) => a + (Number(r.cantidad) || 0), 0)}
-          </Badge>
-        </div>
-      )}
-
       {/* Table */}
-      {rows.length > 0 && (
+      {rows.length > 0 ? (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full min-w-[1100px] border-collapse text-sm">
             <thead>
               <tr>
                 {[
-                  "# ITEM", "Carro", "TN", "N° OC", "Fecha despacho",
-                  "Código SAP", "Descripción", "Acciones", "UMB", "Cantidad",
-                  "Und/Caja Master", "Cant. Cajas", "Paletas",
-                  "Vencimiento\n(0/1)", "¿Nuevo?\n(0/1)", "EAN 13",
-                  "Alto CM", "Ancho CM", "Largo CM", "Vol CM³", "Peso KG", "EAN 14"
+                  "#", "Carro", "TN", "N° OC", "Fecha",
+                  "Código", "Descripción", "", "UMB", "Cant.",
+                  "Und/Caja", "Cajas", "Paletas",
+                  "Venc.", "Nuevo", "EAN 13",
+                  "Alto", "Ancho", "Largo", "Vol CM³", "Peso KG", "EAN 14"
                 ].map((h, i) => (
-                  <th
-                    key={i}
-                    className="whitespace-pre-line border border-border bg-[hsl(120,100%,23%)] px-2 py-2 text-center text-xs font-bold text-white"
-                  >
+                  <th key={i} className="whitespace-nowrap border border-border bg-[hsl(120,100%,23%)] px-2 py-2 text-center text-xs font-bold text-white">
                     {h}
                   </th>
                 ))}
@@ -542,61 +377,48 @@ export default function Citas() {
             <tbody>
               {rows.map((r, idx) => (
                 <tr key={idx} className="hover:bg-muted/30">
-                  <td className="border border-border px-2 py-1.5 text-center">{r.item}</td>
-                  <td className="border border-border px-2 py-1.5 text-center">{r.carro}</td>
-                  <td className="border border-border px-2 py-1.5 text-center">{r.tn}</td>
-                  <td className="border border-border px-2 py-1.5">{r.oc}</td>
-                  <td className="border border-border px-2 py-1.5 text-center">{r.fechaTexto}</td>
-                  <td className="border border-border px-2 py-1.5 text-right">{r.codigo}</td>
-                  <td className="border border-border px-2 py-1.5">{r.descripcion}</td>
-                  <td className="border border-border px-2 py-1.5 text-center">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => handleDeleteRow(idx)}
-                    >
+                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.item}</td>
+                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.carro}</td>
+                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.tn}</td>
+                  <td className="border border-border px-2 py-1.5 text-xs">{r.oc}</td>
+                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.fechaTexto}</td>
+                  <td className="border border-border px-2 py-1.5 text-right text-xs">{r.codigo}</td>
+                  <td className="border border-border px-2 py-1.5 text-xs">{r.descripcion}</td>
+                  <td className="border border-border px-1 py-1 text-center">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(idx)}>
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </td>
-                  <td className="border border-border px-2 py-1.5 text-center">{r.umb}</td>
-                  <td className="border border-border px-2 py-1.5">
-                    <Input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={r.cantidad}
-                      onChange={(e) => handleQuantityChange(idx, e.target.value)}
-                      className="h-7 w-20 text-right text-xs"
-                    />
+                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.umb}</td>
+                  <td className="border border-border px-1 py-1">
+                    <Input type="number" min={0} step={1} value={r.cantidad}
+                      onChange={(e) => handleQtyChange(idx, e.target.value)}
+                      className="h-7 w-16 text-right text-xs" />
                   </td>
-                  <td className="border border-border px-2 py-1.5 text-right">{r.undCajaMaster ?? ""}</td>
-                  <td className="border border-border px-2 py-1.5 text-right">
-                    {r.cantCajasMaster !== null && r.cantCajasMaster !== "" ? String(r.cantCajasMaster) : ""}
+                  <td className="border border-border px-2 py-1.5 text-right text-xs">{r.undCajaMaster ?? ""}</td>
+                  <td className="border border-border px-2 py-1.5 text-right text-xs">
+                    {r.cantCajasMaster != null && r.cantCajasMaster !== "" ? String(r.cantCajasMaster) : ""}
                   </td>
-                  <td className="border border-border px-2 py-1.5">{r.cantPaletas}</td>
-                  <td className="border border-border px-2 py-1.5 text-center">{String(r.prodConVenc)}</td>
-                  <td className="border border-border px-2 py-1.5 text-center">{String(r.prodNuevo)}</td>
-                  <td className="border border-border px-2 py-1.5">{String(r.ean13)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right">{fmt3(r.altoCm)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right">{fmt3(r.anchoCm)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right">{fmt3(r.largoCm)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right">{fmtMiles0(r.volumenCm3)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right">{fmt2(r.pesoKg)}</td>
-                  <td className="border border-border px-2 py-1.5">{String(r.ean14)}</td>
+                  <td className="border border-border px-2 py-1.5 text-xs">{r.cantPaletas}</td>
+                  <td className="border border-border px-2 py-1.5 text-center text-xs">{String(r.prodConVenc)}</td>
+                  <td className="border border-border px-2 py-1.5 text-center text-xs">{String(r.prodNuevo)}</td>
+                  <td className="border border-border px-2 py-1.5 text-xs">{String(r.ean13)}</td>
+                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmt3(r.altoCm)}</td>
+                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmt3(r.anchoCm)}</td>
+                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmt3(r.largoCm)}</td>
+                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmtMiles0(r.volumenCm3)}</td>
+                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmt2(r.pesoKg)}</td>
+                  <td className="border border-border px-2 py-1.5 text-xs">{String(r.ean14)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      )}
-
-      {/* Empty state */}
-      {rows.length === 0 && !processing && (
+      ) : !processing && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FileSpreadsheet className="mb-3 h-10 w-10 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
-            Sube PDFs de órdenes de compra y procésalos para ver la tabla aquí.
+            Selecciona fecha, sube PDFs de OC y haz clic en Procesar.
           </p>
         </div>
       )}
