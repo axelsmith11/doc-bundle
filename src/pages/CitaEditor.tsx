@@ -584,54 +584,148 @@ export default function CitaEditor() {
 
       {/* Table */}
       {rows.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[1100px] border-collapse text-sm">
-            <thead>
-              <tr>
-                {["#","Carro","TN","N° OC","Fecha","Código","Descripción","","UMB","Cant.",
-                  "Und/Caja","Cajas","Paletas","Venc.","Nuevo","EAN 13",
-                  "Alto","Ancho","Largo","Vol CM³","Peso KG","EAN 14"
-                ].map((h, i) => (
-                  <th key={i} className="whitespace-nowrap border border-border bg-[hsl(120,100%,23%)] px-2 py-2 text-center text-xs font-bold text-white">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, idx) => (
-                <tr key={idx} className="hover:bg-muted/30">
-                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.item}</td>
-                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.carro}</td>
-                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.tn}</td>
-                  <td className="border border-border px-2 py-1.5 text-xs">{r.oc}</td>
-                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.fechaTexto}</td>
-                  <td className="border border-border px-2 py-1.5 text-right text-xs">{r.codigo}</td>
-                  <td className="border border-border px-2 py-1.5 text-xs">{r.descripcion}</td>
-                  <td className="border border-border px-1 py-1 text-center">
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(idx)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </td>
-                  <td className="border border-border px-2 py-1.5 text-center text-xs">{r.umb}</td>
-                  <td className="border border-border px-1 py-1">
-                    <Input type="number" min={0} step={1} value={r.cantidad} onChange={(e) => handleQtyChange(idx, e.target.value)} className="h-7 w-16 text-right text-xs" />
-                  </td>
-                  <td className="border border-border px-2 py-1.5 text-right text-xs">{r.undCajaMaster ?? ""}</td>
-                  <td className="border border-border px-2 py-1.5 text-right text-xs">{r.cantCajasMaster != null && r.cantCajasMaster !== "" ? String(r.cantCajasMaster) : ""}</td>
-                  <td className="border border-border px-2 py-1.5 text-xs">{r.cantPaletas}</td>
-                  <td className="border border-border px-2 py-1.5 text-center text-xs">{String(r.prodConVenc)}</td>
-                  <td className="border border-border px-2 py-1.5 text-center text-xs">{String(r.prodNuevo)}</td>
-                  <td className="border border-border px-2 py-1.5 text-xs">{String(r.ean13)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmt3(r.altoCm)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmt3(r.anchoCm)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmt3(r.largoCm)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmtMiles0(r.volumenCm3)}</td>
-                  <td className="border border-border px-2 py-1.5 text-right text-xs">{fmt2(r.pesoKg)}</td>
-                  <td className="border border-border px-2 py-1.5 text-xs">{String(r.ean14)}</td>
+        <>
+          {/* Bulk actions bar */}
+          {selected.size > 0 && (
+            <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+              <span className="text-sm font-medium text-foreground">
+                {selected.size} ítem{selected.size !== 1 ? "s" : ""} seleccionado{selected.size !== 1 ? "s" : ""}
+              </span>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="ml-auto"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                Eliminar seleccionados
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setSelected(new Set())}>
+                Cancelar
+              </Button>
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full min-w-[1100px] border-collapse">
+              <thead>
+                <tr>
+                  <th className="border border-border bg-[hsl(var(--primary))] px-3 py-3 text-center">
+                    <Checkbox
+                      checked={selected.size === rows.length && rows.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                      className="border-white data-[state=checked]:bg-white data-[state=checked]:text-primary"
+                    />
+                  </th>
+                  {["#","Carro","TN","N° OC","Fecha","Código","Descripción","UMB","Cant.",
+                    "Und/Caja","Cajas","Paletas","Venc.","Nuevo","EAN 13",
+                    "Alto","Ancho","Largo","Vol CM³","Peso KG","EAN 14"
+                  ].map((h, i) => (
+                    <th key={i} className="whitespace-nowrap border border-border bg-[hsl(120,100%,23%)] px-3 py-3 text-center text-sm font-bold text-white">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r, idx) => {
+                  const hasMaster = MASTER[r.codigo];
+                  const isSelected = selected.has(idx);
+                  return (
+                    <tr
+                      key={idx}
+                      className={cn(
+                        "transition-colors",
+                        isSelected && "bg-primary/10",
+                        !hasMaster && "bg-amber-50 dark:bg-amber-950/20",
+                        hasMaster && !isSelected && "hover:bg-muted/30"
+                      )}
+                    >
+                      <td className="border border-border px-3 py-2.5 text-center">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelect(idx)}
+                        />
+                      </td>
+                      <td className="border border-border px-3 py-2.5 text-center text-sm">{r.item}</td>
+                      <td className="border border-border px-3 py-2.5 text-center text-sm">{r.carro}</td>
+                      <td className="border border-border px-3 py-2.5 text-center text-sm">{r.tn}</td>
+                      <td className="border border-border px-3 py-2.5 text-sm">{r.oc}</td>
+                      <td className="border border-border px-3 py-2.5 text-center text-sm">{r.fechaTexto}</td>
+                      <td className="border border-border px-3 py-2.5 text-right text-sm font-mono">{r.codigo}</td>
+                      <td className="border border-border px-3 py-2.5 text-sm">
+                        {r.descripcion}
+                        {!hasMaster && (
+                          <span className="ml-1.5 inline-block rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                            Sin datos maestros
+                          </span>
+                        )}
+                      </td>
+                      <td className="border border-border px-3 py-2.5 text-center text-sm">{r.umb}</td>
+                      <td className="border border-border px-2 py-1.5">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => handleQtyIncrement(idx, -1)}
+                            disabled={r.cantidad <= 0}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={r.cantidad}
+                            onChange={(e) => handleQtyChange(idx, e.target.value)}
+                            className="h-8 w-20 text-center text-sm font-semibold"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => handleQtyIncrement(idx, 1)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                      <td className="border border-border px-3 py-2.5 text-right text-sm">{r.undCajaMaster ?? ""}</td>
+                      <td className="border border-border px-3 py-2.5 text-right text-sm">{r.cantCajasMaster != null && r.cantCajasMaster !== "" ? String(r.cantCajasMaster) : ""}</td>
+                      <td className="border border-border px-3 py-2.5 text-sm">{r.cantPaletas}</td>
+                      <td className="border border-border px-3 py-2.5 text-center text-sm">{String(r.prodConVenc)}</td>
+                      <td className="border border-border px-3 py-2.5 text-center text-sm">{String(r.prodNuevo)}</td>
+                      <td className="border border-border px-3 py-2.5 text-sm font-mono">{String(r.ean13)}</td>
+                      <td className="border border-border px-3 py-2.5 text-right text-sm">{fmt3(r.altoCm)}</td>
+                      <td className="border border-border px-3 py-2.5 text-right text-sm">{fmt3(r.anchoCm)}</td>
+                      <td className="border border-border px-3 py-2.5 text-right text-sm">{fmt3(r.largoCm)}</td>
+                      <td className="border border-border px-3 py-2.5 text-right text-sm">{fmtMiles0(r.volumenCm3)}</td>
+                      <td className="border border-border px-3 py-2.5 text-right text-sm">{fmt2(r.pesoKg)}</td>
+                      <td className="border border-border px-3 py-2.5 text-sm font-mono">{String(r.ean14)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Delete confirmation dialog */}
+          <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar {selected.size} ítem{selected.size !== 1 ? "s" : ""}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Los ítems seleccionados se eliminarán de la lista. Esta acción no se puede deshacer.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Eliminar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
       ) : !processing && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FileSpreadsheet className="mb-3 h-10 w-10 text-muted-foreground/40" />
