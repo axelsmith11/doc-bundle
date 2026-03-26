@@ -544,6 +544,16 @@ export default function CitaEditor() {
                 <Loader2 className="mb-2 h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm font-medium text-foreground">{status || "Procesando…"}</p>
               </>
+            ) : pendingFiles.length > 0 ? (
+              <>
+                <CalendarIcon className="mb-2 h-8 w-8 text-amber-500" />
+                <p className="text-sm font-medium text-foreground">
+                  {pendingFiles.length} PDF{pendingFiles.length !== 1 ? "s" : ""} pendiente{pendingFiles.length !== 1 ? "s" : ""}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Selecciona la fecha de despacho arriba para procesarlos automáticamente
+                </p>
+              </>
             ) : (
               <>
                 <Upload className="mb-2 h-8 w-8 text-muted-foreground/60" />
