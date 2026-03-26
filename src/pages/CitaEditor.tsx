@@ -292,10 +292,11 @@ export default function CitaEditor() {
       setOcs(allOcs);
       setStatus(`${allRows.length} ítems de ${allOcs.size} OC(s)`);
 
-      // Auto-set name if empty
-      if (!citaName && allOcs.size > 0) {
-        const name = `OC ${Array.from(allOcs).join(", ")}`;
-        setCitaName(name);
+      // Auto-set name from PDF filenames and OC numbers
+      if (!citaName) {
+        const pdfNames = files.map((f) => f.name.replace(/\.pdf$/i, "")).join(", ");
+        const ocLabel = allOcs.size > 0 ? `OC ${Array.from(allOcs).join(", ")}` : "";
+        setCitaName(ocLabel || pdfNames);
       }
     } catch (e) {
       console.error(e);
