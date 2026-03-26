@@ -413,7 +413,45 @@ export default function CitaEditor() {
     }
   }, [fecha, rows.length, processing]);
 
-  const handleFileDrop = useCallback((e: React.DragEvent) => {
+  // ─── Generar Cita (send to n8n) ───
+  const handleGenerarCita = useCallback(async () => {
+    if (!rows.length) { toast.error("No hay ítems para generar la cita"); return; }
+    if (!fecha) { toast.error("Selecciona la fecha de despacho"); return; }
+    setGeneratingCita(true);
+    try {
+      const buf = await buildExcelBuffer(rows);
+      const uint8 = new Uint8Array(buf as ArrayBuffer);
+      let binary = "";
+      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+      const excelBase64 = btoa(binary);
+      const excelFileName = `OCs_${citaName || Date.now()}.xlsx`;
+
+      const { data, error } = await supabase.functions.invoke("trigger-n8n-cita", {
+        body: {
+          citaId: id,
+          citaName,
+          fechaDespacho: format(fecha, "yyyy-MM-dd"),
+          horaEntrega,
+          excelBase64,
+          excelFileName,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.success) {
+        toast.success("Cita enviada a Tai Loy exitosamente");
+      } else {
+        throw new Error(data?.error || "Error desconocido");
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(`Error generando cita: ${e.message || "Error desconocido"}`);
+    } finally {
+      setGeneratingCita(false);
+    }
+  }, [rows, fecha, citaName, horaEntrega, id]);
+
+
     e.preventDefault();
     setDraggingOver(false);
     const files = Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf");
