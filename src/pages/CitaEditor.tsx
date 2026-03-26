@@ -214,6 +214,7 @@ export default function CitaEditor() {
   const [draggingOver, setDraggingOver] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load cita data
@@ -274,21 +275,26 @@ export default function CitaEditor() {
     if (data) setSavedFiles(data as SavedFile[]);
   }, [id, user]);
 
-  const processFiles = useCallback(async (files: File[]) => {
+  const processFiles = useCallback(async (files: File[], useFecha?: Date) => {
     if (!files.length) return;
-    if (!fecha) { toast.error("Selecciona la fecha de despacho primero."); return; }
+    const effectiveFecha = useFecha || fecha;
+    if (!effectiveFecha) {
+      // Queue files and prompt for date
+      setPendingFiles((prev) => [...prev, ...files]);
+      toast.info("Selecciona la fecha de despacho para procesar los PDFs.", { duration: 4000 });
+      return;
+    }
 
-    const fechaTexto = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
+    const fechaTexto = `${String(effectiveFecha.getDate()).padStart(2, "0")}/${String(effectiveFecha.getMonth() + 1).padStart(2, "0")}/${effectiveFecha.getFullYear()}`;
     setProcessing(true);
     try {
       const newRows: OCRow[] = [];
       const newOcs = new Set<string>();
-      // Start counter after existing rows
       let counter = rows.length + 1;
       for (let i = 0; i < files.length; i++) {
         setStatus(`Leyendo PDF ${i + 1}/${files.length}…`);
         const text = await readPdfText(files[i]);
-        const { oc, rows: parsed } = extractRows(text, fecha, fechaTexto, counter);
+        const { oc, rows: parsed } = extractRows(text, effectiveFecha, fechaTexto, counter);
         if (oc) newOcs.add(oc);
         newRows.push(...parsed);
         counter += parsed.length;
@@ -297,7 +303,6 @@ export default function CitaEditor() {
         await uploadFile(files[i], files[i].name, "pdf_oc");
       }
 
-      // Accumulate rows and OCs
       setRows((prev) => [...prev, ...newRows]);
       setOcs((prev) => {
         const merged = new Set(prev);
@@ -306,7 +311,6 @@ export default function CitaEditor() {
       });
       setStatus(`${rows.length + newRows.length} ítems de ${ocs.size + newOcs.size} OC(s)`);
 
-      // Auto-set name
       if (!citaName && newOcs.size > 0) {
         setCitaName(`OC ${Array.from(newOcs).join(", ")}`);
       } else if (!citaName) {
@@ -322,6 +326,43 @@ export default function CitaEditor() {
       setProcessing(false);
     }
   }, [fecha, citaName, uploadFile, rows.length, ocs.size]);
+
+  // Auto-process pending files when date is selected
+  useEffect(() => {
+    if (fecha && pendingFiles.length > 0) {
+      const files = [...pendingFiles];
+      setPendingFiles([]);
+      processFiles(files, fecha);
+    }
+  }, [fecha]);
+
+  // Re-process a saved PDF from storage
+  const reprocessSavedPdf = useCallback(async (sf: SavedFile) => {
+    if (!fecha) {
+      toast.info("Selecciona la fecha de despacho primero.");
+      return;
+    }
+    const { data, error } = await supabase.storage.from("cita-files").download(sf.storage_path);
+    if (error || !data) { toast.error("Error descargando archivo"); return; }
+    const ab = await data.arrayBuffer();
+    const file = new globalThis.File([ab], sf.file_name, { type: "application/pdf" });
+    // Process without re-uploading (already saved)
+    const fechaTexto = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
+    setProcessing(true);
+    try {
+      const text = await readPdfText(file);
+      const counter = rows.length + 1;
+      const { oc, rows: parsed } = extractRows(text, fecha, fechaTexto, counter);
+      setRows((prev) => [...prev, ...parsed]);
+      if (oc) setOcs((prev) => new Set([...prev, oc]));
+      setStatus(`${rows.length + parsed.length} ítems`);
+      toast.success(`${parsed.length} ítems procesados de ${sf.file_name}`);
+    } catch {
+      toast.error("Error reprocesando PDF");
+    } finally {
+      setProcessing(false);
+    }
+  }, [fecha, rows.length]);
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -503,6 +544,16 @@ export default function CitaEditor() {
                 <Loader2 className="mb-2 h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm font-medium text-foreground">{status || "Procesando…"}</p>
               </>
+            ) : pendingFiles.length > 0 ? (
+              <>
+                <CalendarIcon className="mb-2 h-8 w-8 text-amber-500" />
+                <p className="text-sm font-medium text-foreground">
+                  {pendingFiles.length} PDF{pendingFiles.length !== 1 ? "s" : ""} pendiente{pendingFiles.length !== 1 ? "s" : ""}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Selecciona la fecha de despacho arriba para procesarlos automáticamente
+                </p>
+              </>
             ) : (
               <>
                 <Upload className="mb-2 h-8 w-8 text-muted-foreground/60" />
@@ -540,16 +591,26 @@ export default function CitaEditor() {
                   <p className="mb-1.5 text-xs font-medium text-muted-foreground">PDFs de OC</p>
                   <div className="space-y-1">
                     {pdfFiles.map((f) => (
-                      <div key={f.id} className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5">
-                        <FileText className="h-3.5 w-3.5 shrink-0 text-red-500" />
-                        <button onClick={() => handleDownloadFile(f)} className="min-w-0 flex-1 truncate text-left text-xs text-foreground hover:underline">
+                      <div key={f.id} className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2">
+                        <FileText className="h-4 w-4 shrink-0 text-destructive" />
+                        <button onClick={() => handleDownloadFile(f)} className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:underline">
                           {f.file_name}
                         </button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 shrink-0 text-xs"
+                          onClick={() => reprocessSavedPdf(f)}
+                          disabled={processing}
+                        >
+                          <Upload className="mr-1 h-3 w-3" />
+                          Procesar
+                        </Button>
                         <span className="shrink-0 text-[10px] text-muted-foreground">
                           {new Date(f.created_at).toLocaleDateString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                         </span>
                         <button onClick={() => handleDeleteFile(f)} className="shrink-0 text-muted-foreground hover:text-destructive">
-                          <X className="h-3 w-3" />
+                          <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     ))}
