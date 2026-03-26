@@ -8,8 +8,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-  Plus, Search, FileSpreadsheet, Clock, CheckCircle2, Loader2, CalendarDays,
+  Plus, Search, FileSpreadsheet, Clock, CheckCircle2, Loader2, CalendarDays, Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Cita {
   id: string;
