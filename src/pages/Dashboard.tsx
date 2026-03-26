@@ -14,7 +14,18 @@ import {
   Clock,
   CheckCircle2,
   Loader2,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Process = Tables<"processes">;
@@ -26,6 +37,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     loadProcesses();
@@ -57,6 +69,23 @@ export default function Dashboard() {
     setCreating(false);
     if (error) toast.error("Error creando proceso");
     else if (data) navigate(`/proceso/${data.id}`);
+  };
+
+  const deleteProcess = async () => {
+    if (!deleteTarget) return;
+    // Delete files from storage
+    const { data: files } = await supabase
+      .from("process_files")
+      .select("storage_path")
+      .eq("process_id", deleteTarget);
+    if (files?.length) {
+      await supabase.storage.from("process-files").remove(files.map((f) => f.storage_path));
+    }
+    await supabase.from("process_files").delete().eq("process_id", deleteTarget);
+    await supabase.from("processes").delete().eq("id", deleteTarget);
+    setDeleteTarget(null);
+    setProcesses((prev) => prev.filter((p) => p.id !== deleteTarget));
+    toast.success("Proceso eliminado");
   };
 
   const filtered = processes.filter(
@@ -122,22 +151,46 @@ export default function Dashboard() {
                     })}
                   </p>
                 </div>
-                <Badge
-                  variant={process.status === "completed" ? "default" : "secondary"}
-                  className="ml-3 shrink-0"
-                >
-                  {process.status === "completed" ? (
-                    <CheckCircle2 className="mr-1 h-3 w-3" />
-                  ) : (
-                    <Clock className="mr-1 h-3 w-3" />
-                  )}
-                  {process.status === "completed" ? "Completado" : "Borrador"}
-                </Badge>
+                <div className="flex items-center gap-2 ml-3 shrink-0">
+                  <Badge variant={process.status === "completed" ? "default" : "secondary"}>
+                    {process.status === "completed" ? (
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                    ) : (
+                      <Clock className="mr-1 h-3 w-3" />
+                    )}
+                    {process.status === "completed" ? "Completado" : "Borrador"}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(process.id); }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar proceso?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminarán permanentemente el proceso y todos sus archivos asociados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={deleteProcess} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

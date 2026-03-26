@@ -8,8 +8,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-  Plus, Search, FileSpreadsheet, Clock, CheckCircle2, Loader2, CalendarDays,
+  Plus, Search, FileSpreadsheet, Clock, CheckCircle2, Loader2, CalendarDays, Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Cita {
   id: string;
@@ -29,6 +39,7 @@ export default function CitasDashboard() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     loadCitas();
@@ -60,6 +71,22 @@ export default function CitasDashboard() {
     setCreating(false);
     if (error) toast.error("Error creando cita");
     else if (data) navigate(`/cita/${data.id}`);
+  };
+
+  const deleteCita = async () => {
+    if (!deleteTarget) return;
+    const { data: files } = await supabase
+      .from("cita_files")
+      .select("storage_path")
+      .eq("cita_id", deleteTarget);
+    if (files?.length) {
+      await supabase.storage.from("cita-files").remove(files.map((f) => f.storage_path));
+    }
+    await supabase.from("cita_files").delete().eq("cita_id", deleteTarget);
+    await supabase.from("citas").delete().eq("id", deleteTarget);
+    setDeleteTarget(null);
+    setCitas((prev) => prev.filter((c) => c.id !== deleteTarget));
+    toast.success("Cita eliminada");
   };
 
   const filtered = citas.filter(
@@ -132,22 +159,46 @@ export default function CitasDashboard() {
                     </span>
                   </div>
                 </div>
-                <Badge
-                  variant={cita.status === "completed" ? "default" : "secondary"}
-                  className="ml-3 shrink-0"
-                >
-                  {cita.status === "completed" ? (
-                    <CheckCircle2 className="mr-1 h-3 w-3" />
-                  ) : (
-                    <Clock className="mr-1 h-3 w-3" />
-                  )}
-                  {cita.status === "completed" ? "Completada" : "Borrador"}
-                </Badge>
+                <div className="flex items-center gap-2 ml-3 shrink-0">
+                  <Badge variant={cita.status === "completed" ? "default" : "secondary"}>
+                    {cita.status === "completed" ? (
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                    ) : (
+                      <Clock className="mr-1 h-3 w-3" />
+                    )}
+                    {cita.status === "completed" ? "Completada" : "Borrador"}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(cita.id); }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar cita?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminarán permanentemente la cita y todos sus archivos asociados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={deleteCita} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
