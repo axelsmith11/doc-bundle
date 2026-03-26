@@ -275,21 +275,26 @@ export default function CitaEditor() {
     if (data) setSavedFiles(data as SavedFile[]);
   }, [id, user]);
 
-  const processFiles = useCallback(async (files: File[]) => {
+  const processFiles = useCallback(async (files: File[], useFecha?: Date) => {
     if (!files.length) return;
-    if (!fecha) { toast.error("Selecciona la fecha de despacho primero."); return; }
+    const effectiveFecha = useFecha || fecha;
+    if (!effectiveFecha) {
+      // Queue files and prompt for date
+      setPendingFiles((prev) => [...prev, ...files]);
+      toast.info("Selecciona la fecha de despacho para procesar los PDFs.", { duration: 4000 });
+      return;
+    }
 
-    const fechaTexto = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
+    const fechaTexto = `${String(effectiveFecha.getDate()).padStart(2, "0")}/${String(effectiveFecha.getMonth() + 1).padStart(2, "0")}/${effectiveFecha.getFullYear()}`;
     setProcessing(true);
     try {
       const newRows: OCRow[] = [];
       const newOcs = new Set<string>();
-      // Start counter after existing rows
       let counter = rows.length + 1;
       for (let i = 0; i < files.length; i++) {
         setStatus(`Leyendo PDF ${i + 1}/${files.length}…`);
         const text = await readPdfText(files[i]);
-        const { oc, rows: parsed } = extractRows(text, fecha, fechaTexto, counter);
+        const { oc, rows: parsed } = extractRows(text, effectiveFecha, fechaTexto, counter);
         if (oc) newOcs.add(oc);
         newRows.push(...parsed);
         counter += parsed.length;
@@ -298,7 +303,6 @@ export default function CitaEditor() {
         await uploadFile(files[i], files[i].name, "pdf_oc");
       }
 
-      // Accumulate rows and OCs
       setRows((prev) => [...prev, ...newRows]);
       setOcs((prev) => {
         const merged = new Set(prev);
@@ -307,7 +311,6 @@ export default function CitaEditor() {
       });
       setStatus(`${rows.length + newRows.length} ítems de ${ocs.size + newOcs.size} OC(s)`);
 
-      // Auto-set name
       if (!citaName && newOcs.size > 0) {
         setCitaName(`OC ${Array.from(newOcs).join(", ")}`);
       } else if (!citaName) {
@@ -323,6 +326,42 @@ export default function CitaEditor() {
       setProcessing(false);
     }
   }, [fecha, citaName, uploadFile, rows.length, ocs.size]);
+
+  // Auto-process pending files when date is selected
+  useEffect(() => {
+    if (fecha && pendingFiles.length > 0) {
+      const files = [...pendingFiles];
+      setPendingFiles([]);
+      processFiles(files, fecha);
+    }
+  }, [fecha]);
+
+  // Re-process a saved PDF from storage
+  const reprocessSavedPdf = useCallback(async (sf: SavedFile) => {
+    if (!fecha) {
+      toast.info("Selecciona la fecha de despacho primero.");
+      return;
+    }
+    const { data, error } = await supabase.storage.from("cita-files").download(sf.storage_path);
+    if (error || !data) { toast.error("Error descargando archivo"); return; }
+    const file = new File([data], sf.file_name, { type: "application/pdf" });
+    // Process without re-uploading (already saved)
+    const fechaTexto = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
+    setProcessing(true);
+    try {
+      const text = await readPdfText(file);
+      const counter = rows.length + 1;
+      const { oc, rows: parsed } = extractRows(text, fecha, fechaTexto, counter);
+      setRows((prev) => [...prev, ...parsed]);
+      if (oc) setOcs((prev) => new Set([...prev, oc]));
+      setStatus(`${rows.length + parsed.length} ítems`);
+      toast.success(`${parsed.length} ítems procesados de ${sf.file_name}`);
+    } catch {
+      toast.error("Error reprocesando PDF");
+    } finally {
+      setProcessing(false);
+    }
+  }, [fecha, rows.length]);
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
