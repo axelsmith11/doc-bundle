@@ -234,6 +234,7 @@ export default function CitaEditor() {
       }
       if (filesRes.data) setSavedFiles(filesRes.data as SavedFile[]);
       setLoadingCita(false);
+      initialLoadDone.current = true;
     })();
   }, [id]);
 
