@@ -276,7 +276,7 @@ export default function CitaEditor() {
   }, [id, user]);
 
   const processFiles = useCallback(async (files: File[], useFecha?: Date) => {
-    if (!files.length) return;
+    if (!files.length || processing) return;
     const effectiveFecha = useFecha || fecha;
     if (!effectiveFecha) {
       // Queue files and prompt for date
@@ -325,7 +325,7 @@ export default function CitaEditor() {
     } finally {
       setProcessing(false);
     }
-  }, [fecha, citaName, uploadFile, rows.length, ocs.size]);
+  }, [fecha, citaName, uploadFile, rows.length, ocs.size, processing]);
 
   // Auto-process pending files when date is selected
   useEffect(() => {
@@ -338,6 +338,7 @@ export default function CitaEditor() {
 
   // Re-process a saved PDF from storage
   const reprocessSavedPdf = useCallback(async (sf: SavedFile) => {
+    if (processing) return;
     if (!fecha) {
       toast.info("Selecciona la fecha de despacho primero.");
       return;
@@ -362,7 +363,7 @@ export default function CitaEditor() {
     } finally {
       setProcessing(false);
     }
-  }, [fecha, rows.length]);
+  }, [fecha, rows.length, processing]);
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
