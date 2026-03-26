@@ -257,7 +257,25 @@ export default function CitaEditor() {
     else toast.success("Cita guardada");
   }, [id, user, citaName, fecha, ocs, rows]);
 
-  // Upload file to storage
+  // Auto-save when data changes (after initial load)
+  useEffect(() => {
+    if (!initialLoadDone.current || !id || !user) return;
+    const timer = setTimeout(async () => {
+      await supabase
+        .from("citas")
+        .update({
+          name: citaName || null,
+          fecha_despacho: fecha ? format(fecha, "yyyy-MM-dd") : null,
+          ocs_count: ocs.size,
+          items_count: rows.length,
+          status: rows.length > 0 ? "completed" : "draft",
+        })
+        .eq("id", id);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [citaName, fecha, ocs, rows, id, user]);
+
+
   const uploadFile = useCallback(async (file: File | Blob, fileName: string, fileType: string) => {
     if (!id || !user) return;
     const path = `${user.id}/${id}/${Date.now()}_${fileName}`;
