@@ -325,7 +325,7 @@ export default function CitaEditor() {
     } finally {
       setProcessing(false);
     }
-  }, [fecha, citaName, uploadFile, rows.length, ocs.size]);
+  }, [fecha, citaName, uploadFile, rows.length, ocs.size, processing]);
 
   // Auto-process pending files when date is selected
   useEffect(() => {
