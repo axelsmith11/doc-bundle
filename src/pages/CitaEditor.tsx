@@ -22,6 +22,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useTaiLoyAutomation } from "@/hooks/useTaiLoyAutomation";
 import masterDataJson from "@/data/masterData.json";
 
 // ─── Types ───
@@ -218,6 +219,7 @@ export default function CitaEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { startTaiLoyAutomation, isProcessing: isAutomating } = useTaiLoyAutomation();
   const [rows, setRows] = useState<OCRow[]>([]);
   const [ocs, setOcs] = useState<Set<string>>(new Set());
   const [fecha, setFecha] = useState<Date>();
@@ -413,10 +415,11 @@ export default function CitaEditor() {
     }
   }, [fecha, rows.length, processing]);
 
-  // ─── Generar Cita (send to n8n) ───
-  const handleGenerarCita = useCallback(async () => {
+  // ─── Enviar a Tai Loy (Automatización) ───
+  const handleEnviarTaiLoy = useCallback(async () => {
     if (!rows.length) { toast.error("No hay ítems para generar la cita"); return; }
     if (!fecha) { toast.error("Selecciona la fecha de despacho"); return; }
+
     setGeneratingCita(true);
     try {
       const buf = await buildExcelBuffer(rows);
@@ -426,30 +429,25 @@ export default function CitaEditor() {
       const excelBase64 = btoa(binary);
       const excelFileName = `OCs_${citaName || Date.now()}.xlsx`;
 
-      const { data, error } = await supabase.functions.invoke("trigger-n8n-cita", {
-        body: {
-          citaId: id,
-          citaName,
-          fechaDespacho: format(fecha, "yyyy-MM-dd"),
-          horaEntrega,
-          excelBase64,
-          excelFileName,
-        },
+      // Inicia automatización en Tai Loy
+      await startTaiLoyAutomation({
+        user: "20603116021",
+        password: "60014709",
+        excelBase64,
+        excelFileName,
+        fecha: format(fecha, "yyyy-MM-dd"),
+        hora: horaEntrega,
       });
 
-      if (error) throw error;
-      if (data?.success) {
-        toast.success("Cita enviada a Tai Loy exitosamente");
-      } else {
-        throw new Error(data?.error || "Error desconocido");
-      }
+      toast.success("Ventana de Tai Loy abierta - Completa y guarda manualmente");
+
     } catch (e: any) {
       console.error(e);
-      toast.error(`Error generando cita: ${e.message || "Error desconocido"}`);
+      toast.error(`Error: ${e.message || "Error desconocido"}`);
     } finally {
       setGeneratingCita(false);
     }
-  }, [rows, fecha, citaName, horaEntrega, id]);
+  }, [rows, fecha, citaName, horaEntrega, startTaiLoyAutomation]);
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -615,9 +613,9 @@ export default function CitaEditor() {
               {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
               Exportar Excel
             </Button>
-            <Button onClick={handleGenerarCita} disabled={!rows.length || !fecha || generatingCita}>
-              {generatingCita ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Generar Cita
+            <Button onClick={handleEnviarTaiLoy} disabled={!rows.length || !fecha || generatingCita || isAutomating} className="bg-green-600 hover:bg-green-700">
+              {generatingCita || isAutomating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Enviar a Tai Loy
             </Button>
           </div>
 
