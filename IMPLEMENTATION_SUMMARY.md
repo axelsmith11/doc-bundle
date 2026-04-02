@@ -19,7 +19,7 @@ await startTaiLoyAutomation({
 ```
 
 **¿Qué hace?**
-- ✅ Abre nueva ventana de Tai Loy
+- ✅ Abre nueva ventana de Tai Loy 
 - ✅ Inyecta script que llena login automáticamente
 - ✅ Acepta políticas de privacidad
 - ✅ Navega a "Solicitud de Cita" → "Nueva Cita"
