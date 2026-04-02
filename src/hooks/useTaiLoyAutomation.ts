@@ -24,7 +24,7 @@ export const useTaiLoyAutomation = () => {
   const startTaiLoyAutomation = useCallback(async (config: TaiLoyConfig) => {
     setIsProcessing(true);
     try {
-      // PASO 1: Abre ventana de Tai Loy en login
+      // Abre ventana de Tai Loy en login
       const newWindow = window.open(
         "https://www1.tailoy.com.pe/AgendamientoCitas/login",
         "tailoy_cita",
@@ -38,121 +38,147 @@ export const useTaiLoyAutomation = () => {
       }
 
       setTailoyWindow(newWindow);
-      toast.info("Abriendo Tai Loy. Por favor espera...");
+      toast.info("Abriendo Tai Loy. Iniciando sesión automáticamente...");
 
       // Espera a que la página cargue completamente
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 3500));
 
-      // PASO 2: Inyecta script MEJORADO para llenar login
+      // Script mejorado para llenar formulario y enviar
       const loginScript = `
         (function() {
           try {
-            console.log("=== INICIANDO LOGIN AUTOMÁTICO ===");
+            console.log("=== INICIANDO LOGIN AUTOMÁTICO EN TAI LOY ===");
 
-            // BÚSQUEDA EXHAUSTIVA DE CAMPOS
-            const allInputs = document.querySelectorAll('input');
-            console.log("Total de inputs encontrados:", allInputs.length);
+            // Función helper para rellenar input
+            function fillInput(element, value) {
+              if (!element) return false;
 
+              element.focus();
+              element.value = value;
+
+              // Dispara múltiples eventos para máxima compatibilidad
+              const events = ['input', 'change', 'keydown', 'keyup', 'blur'];
+              events.forEach(eventName => {
+                element.dispatchEvent(new Event(eventName, { bubbles: true }));
+              });
+
+              return true;
+            }
+
+            // Encuentra los inputs
+            const inputs = document.querySelectorAll('input');
             let userInput = null;
             let passInput = null;
             let privacyCheckbox = null;
 
-            // Busca por atributos específicos
-            for (const input of allInputs) {
-              const id = input.id.toLowerCase();
-              const name = input.name.toLowerCase();
+            console.log("Total inputs encontrados:", inputs.length);
+
+            for (let i = 0; i < inputs.length; i++) {
+              const input = inputs[i];
               const type = input.type.toLowerCase();
-              const placeholder = input.placeholder.toLowerCase();
 
-              console.log("Input:", { id, name, type, placeholder });
-
-              // Usuario
               if (type === 'text' && !userInput) {
                 userInput = input;
-              }
-
-              // Contraseña
-              if (type === 'password' && !passInput) {
+                console.log("Input de usuario encontrado en posición:", i);
+              } else if (type === 'password' && !passInput) {
                 passInput = input;
-              }
-
-              // Checkbox de políticas
-              if (type === 'checkbox' && !privacyCheckbox) {
+                console.log("Input de contraseña encontrado en posición:", i);
+              } else if (type === 'checkbox' && !privacyCheckbox) {
                 privacyCheckbox = input;
+                console.log("Checkbox encontrado en posición:", i);
               }
             }
 
             // Llena usuario
             if (userInput) {
-              console.log("Llenando usuario...");
-              userInput.focus();
-              userInput.value = "${config.user}";
-              userInput.dispatchEvent(new Event('input', { bubbles: true }));
-              userInput.dispatchEvent(new Event('change', { bubbles: true }));
-              userInput.dispatchEvent(new Event('blur', { bubbles: true }));
-              console.log("✓ Usuario llenado");
+              const resultado = fillInput(userInput, "${config.user}");
+              console.log(resultado ? "✓ Usuario completado: ${config.user}" : "✗ Error al completar usuario");
             } else {
               console.error("✗ No se encontró campo de usuario");
             }
 
+            // Pequeña pausa
+            await new Promise(r => setTimeout(r, 300));
+
             // Llena contraseña
             if (passInput) {
-              console.log("Llenando contraseña...");
-              passInput.focus();
-              passInput.value = "${config.password}";
-              passInput.dispatchEvent(new Event('input', { bubbles: true }));
-              passInput.dispatchEvent(new Event('change', { bubbles: true }));
-              passInput.dispatchEvent(new Event('blur', { bubbles: true }));
-              console.log("✓ Contraseña llenada");
+              const resultado = fillInput(passInput, "${config.password}");
+              console.log(resultado ? "✓ Contraseña completada" : "✗ Error al completar contraseña");
             } else {
               console.error("✗ No se encontró campo de contraseña");
             }
 
-            // Acepta políticas
-            if (privacyCheckbox && !privacyCheckbox.checked) {
-              console.log("Aceptando políticas...");
-              privacyCheckbox.checked = true;
-              privacyCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-              privacyCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
-              console.log("✓ Políticas aceptadas");
+            // Pequeña pausa
+            await new Promise(r => setTimeout(r, 300));
+
+            // Acepta políticas de privacidad
+            if (privacyCheckbox) {
+              if (!privacyCheckbox.checked) {
+                privacyCheckbox.checked = true;
+                privacyCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+                privacyCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
+                console.log("✓ Políticas de privacidad aceptadas");
+              } else {
+                console.log("Políticas ya estaban aceptadas");
+              }
+            } else {
+              console.warn("⚠ No se encontró checkbox de políticas (puede no ser requerido)");
             }
 
-            // Busca botón de envío
+            // Pequeña pausa antes de enviar
+            await new Promise(r => setTimeout(r, 500));
+
+            // Busca y presiona el botón de envío
             const buttons = document.querySelectorAll('button');
             let submitButton = null;
 
             for (const btn of buttons) {
-              const text = btn.textContent.toLowerCase();
-              if (text.includes('ingresar') || text.includes('login') || text.includes('submit')) {
+              const text = btn.textContent.trim().toLowerCase();
+              console.log("Botón encontrado:", text);
+
+              if (text.includes('ingresar') || text.includes('login') || text.includes('entrar')) {
                 submitButton = btn;
+                console.log("✓ Botón de envío encontrado");
                 break;
               }
             }
 
             if (submitButton) {
               console.log("Presionando botón Ingresar...");
-              setTimeout(() => {
-                submitButton.click();
-                console.log("✓ Botón presionado");
-              }, 500);
+              submitButton.click();
+              console.log("✓ Botón presionado - Iniciando sesión...");
             } else {
               console.error("✗ No se encontró botón de envío");
-              console.log("Botones disponibles:", Array.from(buttons).map(b => b.textContent));
+              console.log("Botones disponibles:", Array.from(buttons).map(b => b.textContent.trim()));
             }
 
             console.log("=== SCRIPT DE LOGIN COMPLETADO ===");
           } catch (e) {
             console.error("ERROR EN SCRIPT DE LOGIN:", e);
           }
-        })();
+        })().then ? await (function() {
+          try {
+            return (async function() {
+              await new Promise(r => setTimeout(r, 100));
+            })();
+          } catch (e) {
+            console.error("Error en async:", e);
+          }
+        })() : void 0;
       `;
 
       try {
-        newWindow.eval(loginScript);
-        toast.success("Credenciales inyectadas. Presiona Ingresar en la ventana.");
+        // Ejecuta el script en la ventana
+        (function executeInWindow() {
+          const script = newWindow.document.createElement('script');
+          script.textContent = loginScript.replace(/await/g, '');
+          newWindow.document.head.appendChild(script);
+        })();
+
+        toast.success("✓ Login iniciado. Espera a que se complete...");
       } catch (e) {
         console.error("Error inyectando script:", e);
-        toast.warning("Abre DevTools (F12) en la ventana para ver los errores");
+        toast.warning("No se pudo inyectar el script. Abre DevTools (F12) para ver detalles");
       }
 
     } catch (error: any) {
