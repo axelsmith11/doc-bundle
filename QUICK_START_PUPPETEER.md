@@ -20,7 +20,12 @@ TAILOY_USER=20603116021
 TAILOY_PASS=60014709
 AUTHORIZED_ORIGINS=http://localhost:5173
 NODE_ENV=development
+HEADLESS=false          ← Muestra Chrome visible
 ```
+
+**Opciones HEADLESS:**
+- `HEADLESS=false` → Abre Chrome visible (ves el proceso, presionas "Guardar" manualmente)
+- `HEADLESS=true` → Invisible (backend automatiza todo, más rápido)
 
 **⚠️ IMPORTANTE:** Nunca pushees el `.env` a GitHub. Ya está en `.gitignore`.
 

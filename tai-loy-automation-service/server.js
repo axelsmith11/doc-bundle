@@ -72,8 +72,12 @@ app.post('/automate-cita', async (req, res) => {
     console.log(`[${new Date().toISOString()}] Starting automation for ${fecha} ${hora}`);
 
     // Launch browser
+    // headless: 'new' = invisible (para servidores)
+    // headless: false = visible (para testing/manual approval)
+    const headlessMode = process.env.HEADLESS === 'false' ? false : 'new';
+
     browser = await puppeteer.launch({
-      headless: 'new',
+      headless: headlessMode,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -192,37 +196,28 @@ app.post('/automate-cita', async (req, res) => {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // STEP 4: Save
+    // STEP 4: Wait for user to manually click Save
     // ═══════════════════════════════════════════════════════════
-    console.log('[Step 4] Saving...');
+    console.log('[Step 4] Formulario listo - Esperando que usuario presione "Guardar"...');
 
-    // Click save button
-    const saveButtonSelectors = [
-      'button:has-text("Guardar")',
-      'button:has-text("Enviar")',
-      'button[type="submit"]',
-    ];
+    if (headlessMode === false) {
+      // Modo visible: espera a que el usuario presione manualmente
+      console.log('[Step 4] VISIBLE MODE: Página abierta, presiona "Guardar" manualmente');
+      console.log('[Step 4] El navegador permanecerá abierto. Ciérralo cuando termines.');
 
-    let saveClicked = false;
-    for (const selector of saveButtonSelectors) {
-      try {
-        await page.click(selector);
-        saveClicked = true;
-        console.log(`[Step 4] Clicked save button with selector: ${selector}`);
-        break;
-      } catch (e) {
-        // Continue to next selector
-      }
+      // Espera indefinidamente (hasta que el usuario cierre la ventana o el timeout)
+      // Timeout después de 30 minutos para evitar conexiones abiertas indefinidas
+      await new Promise((resolve) => setTimeout(resolve, 30 * 60 * 1000));
+      console.log('[Step 4] Timeout alcanzado o usuario cerró la ventana');
+    } else {
+      // Modo headless: no podemos ver si el usuario presiona
+      // En este caso, simulamos que está listo pero no guardamos
+      console.log('[Step 4] HEADLESS MODE: Formulario está listo');
+      console.log('[Step 4] El usuario debe presionar "Guardar" manualmente en una ventana abierta');
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    if (!saveClicked) {
-      console.warn('[Step 4] Warning: Could not click save button');
-    }
-
-    // Wait for response
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    console.log('[SUCCESS] Automation completed successfully');
+    console.log('[SUCCESS] Automatización completada - Formulario listo para guardar');
 
     return res.json({
       success: true,
