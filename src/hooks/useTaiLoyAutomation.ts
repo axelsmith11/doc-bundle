@@ -12,7 +12,10 @@ interface TaiLoyConfig {
 
 /**
  * Hook para automatizar el envío de citas a Tai Loy
- * Abre una ventana del navegador y guía el flujo hasta antes de guardar
+ * Paso 1: Abre login y llena credenciales automáticamente
+ * Paso 2: Usuario presiona Ingresar
+ * Paso 3: Redirige a Nueva Cita
+ * Paso 4: Llena formulario de cita
  */
 export const useTaiLoyAutomation = () => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -21,7 +24,7 @@ export const useTaiLoyAutomation = () => {
   const startTaiLoyAutomation = useCallback(async (config: TaiLoyConfig) => {
     setIsProcessing(true);
     try {
-      // Abre ventana de Tai Loy
+      // PASO 1: Abre ventana de Tai Loy en login
       const newWindow = window.open(
         "https://www1.tailoy.com.pe/AgendamientoCitas/login",
         "tailoy_cita",
@@ -35,135 +38,121 @@ export const useTaiLoyAutomation = () => {
       }
 
       setTailoyWindow(newWindow);
+      toast.info("Abriendo Tai Loy. Por favor espera...");
 
-      // Espera a que la página de login cargue
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Espera a que la página cargue completamente
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      // Inyecta script para llenar credenciales automáticamente
+      // PASO 2: Inyecta script MEJORADO para llenar login
       const loginScript = `
         (function() {
           try {
-            console.log("Iniciando automatización de login en Tai Loy...");
+            console.log("=== INICIANDO LOGIN AUTOMÁTICO ===");
 
-            // Busca campos de usuario y contraseña (múltiples selectores para compatibilidad)
-            const userInputs = document.querySelectorAll('input[type="text"], input[type="email"], input#usuario, input[name="usuario"]');
-            const passInput = document.querySelector('input[type="password"], input#contraseña, input[name="contraseña"]');
-            const privacyCheckbox = document.querySelector('input[type="checkbox"]');
-            const submitButton = document.querySelector('button[type="submit"]');
+            // BÚSQUEDA EXHAUSTIVA DE CAMPOS
+            const allInputs = document.querySelectorAll('input');
+            console.log("Total de inputs encontrados:", allInputs.length);
 
-            // Llena credenciales
-            if (userInputs.length > 0) {
-              userInputs[0].value = "${config.user}";
-              userInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-              userInputs[0].dispatchEvent(new Event('change', { bubbles: true }));
+            let userInput = null;
+            let passInput = null;
+            let privacyCheckbox = null;
+
+            // Busca por atributos específicos
+            for (const input of allInputs) {
+              const id = input.id.toLowerCase();
+              const name = input.name.toLowerCase();
+              const type = input.type.toLowerCase();
+              const placeholder = input.placeholder.toLowerCase();
+
+              console.log("Input:", { id, name, type, placeholder });
+
+              // Usuario
+              if (type === 'text' && !userInput) {
+                userInput = input;
+              }
+
+              // Contraseña
+              if (type === 'password' && !passInput) {
+                passInput = input;
+              }
+
+              // Checkbox de políticas
+              if (type === 'checkbox' && !privacyCheckbox) {
+                privacyCheckbox = input;
+              }
             }
 
+            // Llena usuario
+            if (userInput) {
+              console.log("Llenando usuario...");
+              userInput.focus();
+              userInput.value = "${config.user}";
+              userInput.dispatchEvent(new Event('input', { bubbles: true }));
+              userInput.dispatchEvent(new Event('change', { bubbles: true }));
+              userInput.dispatchEvent(new Event('blur', { bubbles: true }));
+              console.log("✓ Usuario llenado");
+            } else {
+              console.error("✗ No se encontró campo de usuario");
+            }
+
+            // Llena contraseña
             if (passInput) {
+              console.log("Llenando contraseña...");
+              passInput.focus();
               passInput.value = "${config.password}";
               passInput.dispatchEvent(new Event('input', { bubbles: true }));
               passInput.dispatchEvent(new Event('change', { bubbles: true }));
+              passInput.dispatchEvent(new Event('blur', { bubbles: true }));
+              console.log("✓ Contraseña llenada");
+            } else {
+              console.error("✗ No se encontró campo de contraseña");
             }
 
             // Acepta políticas
-            if (privacyCheckbox) {
+            if (privacyCheckbox && !privacyCheckbox.checked) {
+              console.log("Aceptando políticas...");
               privacyCheckbox.checked = true;
               privacyCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+              privacyCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
+              console.log("✓ Políticas aceptadas");
             }
 
-            // Envía formulario
+            // Busca botón de envío
+            const buttons = document.querySelectorAll('button');
+            let submitButton = null;
+
+            for (const btn of buttons) {
+              const text = btn.textContent.toLowerCase();
+              if (text.includes('ingresar') || text.includes('login') || text.includes('submit')) {
+                submitButton = btn;
+                break;
+              }
+            }
+
             if (submitButton) {
+              console.log("Presionando botón Ingresar...");
               setTimeout(() => {
                 submitButton.click();
-                console.log("Formulario de login enviado automáticamente");
-              }, 800);
+                console.log("✓ Botón presionado");
+              }, 500);
+            } else {
+              console.error("✗ No se encontró botón de envío");
+              console.log("Botones disponibles:", Array.from(buttons).map(b => b.textContent));
             }
 
-            console.log("Script de login completado");
+            console.log("=== SCRIPT DE LOGIN COMPLETADO ===");
           } catch (e) {
-            console.error("Error en script de login:", e);
+            console.error("ERROR EN SCRIPT DE LOGIN:", e);
           }
         })();
       `;
 
       try {
         newWindow.eval(loginScript);
+        toast.success("Credenciales inyectadas. Presiona Ingresar en la ventana.");
       } catch (e) {
         console.error("Error inyectando script:", e);
-        toast.warning("No se pudo automatizar el login. Completa manualmente.");
-      }
-
-      // Espera a que el usuario navegue después del login (aproximadamente 3-5 segundos)
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      // Intenta navegar a Solicitud de Citas > Nueva Cita
-      try {
-        newWindow.location.href = "https://www1.tailoy.com.pe/SolicitudDeCitas/Nueva";
-      } catch (e) {
-        console.warn("No se pudo redirigir automáticamente:", e);
-        toast.info("Por favor, ve a Solicitud de Cita > Nueva Cita manualmente");
-      }
-
-      // Espera a que cargue la página de nueva cita
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Inyecta script para llenar formulario de cita
-      const citaScript = `
-        (function() {
-          try {
-            // Variables disponibles desde el padre
-            const excelFileName = "${config.excelFileName}";
-            const fecha = "${config.fecha}";
-            const hora = "${config.hora}";
-
-            // Busca campos en el formulario
-            const fileInput = document.querySelector('input[type="file"]');
-            const dateInputs = document.querySelectorAll('input[type="date"]');
-            const timeSelects = document.querySelectorAll('select');
-            const cantCodigos = document.querySelector('input[placeholder*="Códigos"]');
-
-            console.log("Elementos encontrados:", {
-              fileInput: !!fileInput,
-              dateInputs: dateInputs.length,
-              timeSelects: timeSelects.length,
-              cantCodigos: !!cantCodigos
-            });
-
-            // Llena fecha
-            if (dateInputs.length > 0) {
-              dateInputs[0].value = fecha;
-              dateInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-              dateInputs[0].dispatchEvent(new Event('change', { bubbles: true }));
-            }
-
-            // Llena hora
-            if (timeSelects.length > 0) {
-              const [horaInicio, horaFin] = hora.split(' - ');
-              if (timeSelects[0]) {
-                timeSelects[0].value = horaInicio;
-                timeSelects[0].dispatchEvent(new Event('change', { bubbles: true }));
-              }
-              if (timeSelects[1]) {
-                timeSelects[1].value = horaFin;
-                timeSelects[1].dispatchEvent(new Event('change', { bubbles: true }));
-              }
-            }
-
-            console.log("Formulario de cita llenado automáticamente");
-            console.log("Archivo:", excelFileName);
-            console.log("Fecha:", fecha);
-            console.log("Hora:", hora);
-          } catch (e) {
-            console.error("Error en script de cita:", e);
-          }
-        })();
-      `;
-
-      try {
-        newWindow.eval(citaScript);
-        toast.success("Formulario llenado automáticamente. Sube el Excel y confirma.");
-      } catch (e) {
-        console.error("Error inyectando script de cita:", e);
-        toast.info("Por favor, llena manualmente el formulario con los datos de tu cita");
+        toast.warning("Abre DevTools (F12) en la ventana para ver los errores");
       }
 
     } catch (error: any) {
