@@ -27,7 +27,7 @@ export const useTaiLoyAutomation = () => {
   const startTaiLoyAutomation = useCallback(async (config: TaiLoyConfig) => {
     setIsProcessing(true);
     try {
-      // Paso 1: Abre ventana de Tai Loy en login
+      // Abre ventana de Tai Loy
       const newWindow = window.open(
         "https://www1.tailoy.com.pe/AgendamientoCitas/login",
         "tailoy_cita",
@@ -43,107 +43,67 @@ export const useTaiLoyAutomation = () => {
       setTailoyWindow(newWindow);
       toast.info("Abriendo Tai Loy. Iniciando sesión automáticamente...");
 
-      // Espera a que la página cargue completamente
-      await new Promise((resolve) => setTimeout(resolve, 4000));
+      // Espera a que cargue
+      await new Promise((resolve) => setTimeout(resolve, 4500));
 
-      // Paso 2: Inyecta script para llenar login y enviar
-      const loginScript = `
-        (function() {
-          console.log("=== INICIANDO LOGIN AUTOMÁTICO EN TAI LOY ===");
+      // Script mejorado con eval()
+      const autoLoginScript = `
+        (function autoLogin() {
+          console.log("Buscando campos de login...");
 
-          try {
-            // Encuentra todos los inputs
-            const inputs = document.querySelectorAll('input');
-            let userInput = null;
-            let passInput = null;
-            let privacyCheckbox = null;
+          const inputs = document.querySelectorAll('input');
+          let userField = null;
+          let passField = null;
+          let checkBox = null;
 
-            console.log("Total inputs encontrados:", inputs.length);
-
-            // Busca por tipo
-            for (let i = 0; i < inputs.length; i++) {
-              const input = inputs[i];
-              const type = input.type ? input.type.toLowerCase() : '';
-
-              if (type === 'text' && !userInput) {
-                userInput = input;
-                console.log("✓ Input de usuario encontrado");
-              } else if (type === 'password' && !passInput) {
-                passInput = input;
-                console.log("✓ Input de contraseña encontrado");
-              } else if (type === 'checkbox' && !privacyCheckbox) {
-                privacyCheckbox = input;
-                console.log("✓ Checkbox de políticas encontrado");
-              }
-            }
-
-            // Función para llenar input
-            function fillInput(element, value) {
-              if (!element) return false;
-              element.focus();
-              element.value = value;
-
-              const events = ['input', 'change', 'keydown', 'keyup', 'blur'];
-              events.forEach(evt => {
-                element.dispatchEvent(new Event(evt, { bubbles: true }));
-              });
-              return true;
-            }
-
-            // Llena usuario
-            if (userInput) {
-              fillInput(userInput, "${config.user}");
-              console.log("✓ Usuario: ${config.user}");
-            }
-
-            // Espera pequeño
-            setTimeout(() => {
-              // Llena contraseña
-              if (passInput) {
-                fillInput(passInput, "${config.password}");
-                console.log("✓ Contraseña completada");
-              }
-
-              // Espera pequeño
-              setTimeout(() => {
-                // Marca checkbox
-                if (privacyCheckbox && !privacyCheckbox.checked) {
-                  privacyCheckbox.checked = true;
-                  privacyCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-                  privacyCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
-                  console.log("✓ Políticas marcadas");
-                }
-
-                // Busca botón "Ingresar"
-                const buttons = document.querySelectorAll('button');
-                for (const btn of buttons) {
-                  const text = btn.textContent ? btn.textContent.trim().toLowerCase() : '';
-                  if (text.includes('ingresar') || text.includes('entrar')) {
-                    console.log("✓ Presionando Ingresar...");
-                    btn.click();
-                    console.log("✓ Sesión iniciada - Redirigiendo...");
-                    break;
-                  }
-                }
-              }, 300);
-            }, 300);
-
-          } catch (e) {
-            console.error("ERROR:", e);
+          // Busca campos
+          for (let inp of inputs) {
+            const type = inp.getAttribute('type') || inp.type;
+            if (type === 'text' && !userField) userField = inp;
+            if (type === 'password' && !passField) passField = inp;
+            if (type === 'checkbox' && !checkBox) checkBox = inp;
           }
+
+          if (!userField || !passField) {
+            console.error("No se encontraron campos");
+            return;
+          }
+
+          // Llena campos
+          userField.value = '${config.user}';
+          userField.dispatchEvent(new Event('input', { bubbles: true }));
+          userField.dispatchEvent(new Event('change', { bubbles: true }));
+
+          passField.value = '${config.password}';
+          passField.dispatchEvent(new Event('input', { bubbles: true }));
+          passField.dispatchEvent(new Event('change', { bubbles: true }));
+
+          // Marca checkbox
+          if (checkBox) {
+            checkBox.checked = true;
+            checkBox.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+
+          // Busca y presiona botón
+          setTimeout(() => {
+            const btns = document.querySelectorAll('button');
+            for (let btn of btns) {
+              if (btn.textContent.toLowerCase().includes('ingresar')) {
+                btn.click();
+                console.log('Login enviado');
+                break;
+              }
+            }
+          }, 500);
         })();
       `;
 
       try {
-        // Ejecuta el script en la ventana
-        const script = newWindow.document.createElement('script');
-        script.textContent = loginScript;
-        newWindow.document.body.appendChild(script);
-
-        toast.success("✓ Login iniciado. Deberías estar en el Home de Tai Loy en segundos...");
+        newWindow.eval(autoLoginScript);
+        toast.success("✓ Login completado automáticamente");
       } catch (e) {
-        console.error("Error inyectando script:", e);
-        toast.error("No se pudo inyectar el script automáticamente. Completa el login manualmente.");
+        console.error("Error con eval:", e);
+        toast.error("No se pudo inyectar script. Completa manualmente: usuario y contraseña, marca políticas, presiona Ingresar");
       }
 
     } catch (error: any) {
