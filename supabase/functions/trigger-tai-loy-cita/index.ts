@@ -58,34 +58,88 @@ Deno.serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // PLAYWRIGHT AUTOMATION - TODO: Requires Deno browser support
+    // CALL NODE.JS AUTOMATION SERVICE
     // ═══════════════════════════════════════════════════════════
 
     console.log("Starting Tai Loy automation...");
     console.log(`Date: ${fechaDespacho}, Time: ${horaEntrega}`);
 
-    // For now, return a structured response
-    // In production, you'll integrate with Playwright/Puppeteer
-    const result = {
-      success: true,
-      status: "ready_for_manual_confirmation",
-      message: "Formulario listo para ser llenado manualmente",
-      data: {
-        citaId,
-        fecha: fechaDespacho,
-        hora: horaEntrega,
-        archivo: excelFileName,
-        excelSize: Math.round((excelBase64.length * 3) / 4 / 1024) + "KB",
-      },
-      nextStep: "El usuario debe confirmar en Tai Loy presionando Guardar",
-    };
+    // Get the automation service URL from environment
+    const AUTOMATION_SERVICE_URL = Deno.env.get("AUTOMATION_SERVICE_URL");
+    if (!AUTOMATION_SERVICE_URL) {
+      return new Response(
+        JSON.stringify({
+          error: "Automation service URL not configured. Set AUTOMATION_SERVICE_URL environment variable."
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
-    console.log("Tai Loy automation preparation complete", result);
+    try {
+      // Call the Node.js automation service
+      const automationResponse = await fetch(`${AUTOMATION_SERVICE_URL}/automate-cita`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fecha: fechaDespacho,
+          hora: horaEntrega,
+          user: TAILOY_USER,
+          pass: TAILOY_PASS,
+        }),
+      });
 
-    return new Response(JSON.stringify(result), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+      const automationResult = await automationResponse.json();
+
+      if (!automationResponse.ok) {
+        console.error("Automation service error:", automationResult);
+        return new Response(JSON.stringify({
+          success: false,
+          error: automationResult.error || "Automation service returned an error",
+        }), {
+          status: automationResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Success!
+      const result = {
+        success: true,
+        status: "cita_registrada",
+        message: "Cita registrada en Tai Loy automáticamente",
+        data: {
+          citaId,
+          fecha: fechaDespacho,
+          hora: horaEntrega,
+          archivo: excelFileName,
+          excelSize: Math.round((excelBase64.length * 3) / 4 / 1024) + "KB",
+          automationServiceResponse: automationResult,
+        },
+      };
+
+      console.log("Tai Loy automation completed successfully", result);
+
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+
+    } catch (automationError: unknown) {
+      const errorMsg = automationError instanceof Error ? automationError.message : "Unknown error calling automation service";
+      console.error("Error calling automation service:", errorMsg);
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Failed to call automation service: ${errorMsg}`,
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
   } catch (error: unknown) {
     console.error("Error in Tai Loy automation:", error);

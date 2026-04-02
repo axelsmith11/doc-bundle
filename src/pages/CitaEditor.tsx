@@ -22,7 +22,6 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useTaiLoyAutomation } from "@/hooks/useTaiLoyAutomation";
 import masterDataJson from "@/data/masterData.json";
 
 // ─── Types ───
@@ -219,7 +218,6 @@ export default function CitaEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { startTaiLoyAutomation, isProcessing: isAutomating } = useTaiLoyAutomation();
   const [rows, setRows] = useState<OCRow[]>([]);
   const [ocs, setOcs] = useState<Set<string>>(new Set());
   const [fecha, setFecha] = useState<Date>();
@@ -236,6 +234,7 @@ export default function CitaEditor() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [horaEntrega, setHoraEntrega] = useState("08:00:00 - 08:10:00");
   const [generatingCita, setGeneratingCita] = useState(false);
+  const [isAutomating, setIsAutomating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialLoadDone = useRef(false);
 
@@ -419,8 +418,9 @@ export default function CitaEditor() {
   const handleEnviarTaiLoy = useCallback(async () => {
     if (!rows.length) { toast.error("No hay ítems para generar la cita"); return; }
     if (!fecha) { toast.error("Selecciona la fecha de despacho"); return; }
+    if (!user) { toast.error("No hay usuario autenticado"); return; }
 
-    setGeneratingCita(true);
+    setIsAutomating(true);
     try {
       const buf = await buildExcelBuffer(rows);
       const uint8 = new Uint8Array(buf as ArrayBuffer);
@@ -429,25 +429,41 @@ export default function CitaEditor() {
       const excelBase64 = btoa(binary);
       const excelFileName = `OCs_${citaName || Date.now()}.xlsx`;
 
-      // Inicia automatización en Tai Loy
-      await startTaiLoyAutomation({
-        user: "20603116021",
-        password: "60014709",
-        excelBase64,
-        excelFileName,
-        fecha: format(fecha, "yyyy-MM-dd"),
-        hora: horaEntrega,
+      toast.info("Iniciando automatización en Tai Loy...");
+
+      // Call Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke("trigger-tai-loy-cita", {
+        body: {
+          excelBase64,
+          excelFileName,
+          fechaDespacho: format(fecha, "yyyy-MM-dd"),
+          horaEntrega,
+        },
       });
 
-      toast.success("Ventana de Tai Loy abierta - Completa y guarda manualmente");
+      if (error) {
+        console.error("Edge Function error:", error);
+        toast.error(`Error: ${error.message || "No se pudo registrar la cita"}`);
+        return;
+      }
+
+      if (data?.success) {
+        toast.success("✓ Cita registrada en Tai Loy automáticamente");
+        // Optionally redirect or clear form
+        setTimeout(() => {
+          navigate("/");
+        }, 2000);
+      } else {
+        toast.error(data?.error || "Error desconocido al registrar la cita");
+      }
 
     } catch (e: any) {
       console.error(e);
       toast.error(`Error: ${e.message || "Error desconocido"}`);
     } finally {
-      setGeneratingCita(false);
+      setIsAutomating(false);
     }
-  }, [rows, fecha, citaName, horaEntrega, startTaiLoyAutomation]);
+  }, [rows, fecha, citaName, horaEntrega, user, navigate]);
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
