@@ -407,12 +407,13 @@ export default function CitaEditor() {
       if (oc) setOcs((prev) => new Set([...prev, oc]));
       setStatus(`${rows.length + parsed.length} ítems`);
       toast.success(`${parsed.length} ítems procesados de ${sf.file_name}`);
-    } catch {
-      toast.error("Error reprocesando PDF");
+    } catch (e: any) {
+      console.error("Error en reprocessSavedPdf:", e);
+      toast.error(`Error reprocesando PDF: ${e?.message || "Error desconocido"}`);
     } finally {
       setProcessing(false);
     }
-  }, [fecha, rows.length, processing]);
+  }, [fecha, rows, processing]);
 
   // ─── Enviar a Tai Loy (Automatización) ───
   const handleEnviarTaiLoy = useCallback(async () => {
