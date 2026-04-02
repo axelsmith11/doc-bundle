@@ -11,11 +11,14 @@ interface TaiLoyConfig {
 }
 
 /**
- * Hook para automatizar el envío de citas a Tai Loy
- * Paso 1: Abre login y llena credenciales automáticamente
- * Paso 2: Usuario presiona Ingresar
- * Paso 3: Redirige a Nueva Cita
- * Paso 4: Llena formulario de cita
+ * Hook para automatizar login en Tai Loy
+ * Flujo:
+ * 1. Abre: https://www1.tailoy.com.pe/AgendamientoCitas/login
+ * 2. Llena usuario y contraseña automáticamente
+ * 3. Marca checkbox "Declaro haber leído las políticas"
+ * 4. Click en "Ingresar"
+ * 5. Se redirige a: https://www1.tailoy.com.pe/AgendamientoCitas/Home
+ * 6. Usuario ve el menú con "Solicitud de Citas"
  */
 export const useTaiLoyAutomation = () => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -24,7 +27,7 @@ export const useTaiLoyAutomation = () => {
   const startTaiLoyAutomation = useCallback(async (config: TaiLoyConfig) => {
     setIsProcessing(true);
     try {
-      // Abre ventana de Tai Loy en login
+      // Paso 1: Abre ventana de Tai Loy en login
       const newWindow = window.open(
         "https://www1.tailoy.com.pe/AgendamientoCitas/login",
         "tailoy_cita",
@@ -41,31 +44,15 @@ export const useTaiLoyAutomation = () => {
       toast.info("Abriendo Tai Loy. Iniciando sesión automáticamente...");
 
       // Espera a que la página cargue completamente
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      await new Promise((resolve) => setTimeout(resolve, 4000));
 
-      // Script mejorado para llenar formulario y enviar
+      // Paso 2: Inyecta script para llenar login y enviar
       const loginScript = `
         (function() {
+          console.log("=== INICIANDO LOGIN AUTOMÁTICO EN TAI LOY ===");
+
           try {
-            console.log("=== INICIANDO LOGIN AUTOMÁTICO EN TAI LOY ===");
-
-            // Función helper para rellenar input
-            function fillInput(element, value) {
-              if (!element) return false;
-
-              element.focus();
-              element.value = value;
-
-              // Dispara múltiples eventos para máxima compatibilidad
-              const events = ['input', 'change', 'keydown', 'keyup', 'blur'];
-              events.forEach(eventName => {
-                element.dispatchEvent(new Event(eventName, { bubbles: true }));
-              });
-
-              return true;
-            }
-
-            // Encuentra los inputs
+            // Encuentra todos los inputs
             const inputs = document.querySelectorAll('input');
             let userInput = null;
             let passInput = null;
@@ -73,116 +60,94 @@ export const useTaiLoyAutomation = () => {
 
             console.log("Total inputs encontrados:", inputs.length);
 
+            // Busca por tipo
             for (let i = 0; i < inputs.length; i++) {
               const input = inputs[i];
-              const type = input.type.toLowerCase();
+              const type = input.type ? input.type.toLowerCase() : '';
 
               if (type === 'text' && !userInput) {
                 userInput = input;
-                console.log("Input de usuario encontrado en posición:", i);
+                console.log("✓ Input de usuario encontrado");
               } else if (type === 'password' && !passInput) {
                 passInput = input;
-                console.log("Input de contraseña encontrado en posición:", i);
+                console.log("✓ Input de contraseña encontrado");
               } else if (type === 'checkbox' && !privacyCheckbox) {
                 privacyCheckbox = input;
-                console.log("Checkbox encontrado en posición:", i);
+                console.log("✓ Checkbox de políticas encontrado");
               }
+            }
+
+            // Función para llenar input
+            function fillInput(element, value) {
+              if (!element) return false;
+              element.focus();
+              element.value = value;
+
+              const events = ['input', 'change', 'keydown', 'keyup', 'blur'];
+              events.forEach(evt => {
+                element.dispatchEvent(new Event(evt, { bubbles: true }));
+              });
+              return true;
             }
 
             // Llena usuario
             if (userInput) {
-              const resultado = fillInput(userInput, "${config.user}");
-              console.log(resultado ? "✓ Usuario completado: ${config.user}" : "✗ Error al completar usuario");
-            } else {
-              console.error("✗ No se encontró campo de usuario");
+              fillInput(userInput, "${config.user}");
+              console.log("✓ Usuario: ${config.user}");
             }
 
-            // Pequeña pausa
-            await new Promise(r => setTimeout(r, 300));
-
-            // Llena contraseña
-            if (passInput) {
-              const resultado = fillInput(passInput, "${config.password}");
-              console.log(resultado ? "✓ Contraseña completada" : "✗ Error al completar contraseña");
-            } else {
-              console.error("✗ No se encontró campo de contraseña");
-            }
-
-            // Pequeña pausa
-            await new Promise(r => setTimeout(r, 300));
-
-            // Acepta políticas de privacidad
-            if (privacyCheckbox) {
-              if (!privacyCheckbox.checked) {
-                privacyCheckbox.checked = true;
-                privacyCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-                privacyCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
-                console.log("✓ Políticas de privacidad aceptadas");
-              } else {
-                console.log("Políticas ya estaban aceptadas");
+            // Espera pequeño
+            setTimeout(() => {
+              // Llena contraseña
+              if (passInput) {
+                fillInput(passInput, "${config.password}");
+                console.log("✓ Contraseña completada");
               }
-            } else {
-              console.warn("⚠ No se encontró checkbox de políticas (puede no ser requerido)");
-            }
 
-            // Pequeña pausa antes de enviar
-            await new Promise(r => setTimeout(r, 500));
+              // Espera pequeño
+              setTimeout(() => {
+                // Marca checkbox
+                if (privacyCheckbox && !privacyCheckbox.checked) {
+                  privacyCheckbox.checked = true;
+                  privacyCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+                  privacyCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
+                  console.log("✓ Políticas marcadas");
+                }
 
-            // Busca y presiona el botón de envío
-            const buttons = document.querySelectorAll('button');
-            let submitButton = null;
+                // Busca botón "Ingresar"
+                const buttons = document.querySelectorAll('button');
+                for (const btn of buttons) {
+                  const text = btn.textContent ? btn.textContent.trim().toLowerCase() : '';
+                  if (text.includes('ingresar') || text.includes('entrar')) {
+                    console.log("✓ Presionando Ingresar...");
+                    btn.click();
+                    console.log("✓ Sesión iniciada - Redirigiendo...");
+                    break;
+                  }
+                }
+              }, 300);
+            }, 300);
 
-            for (const btn of buttons) {
-              const text = btn.textContent.trim().toLowerCase();
-              console.log("Botón encontrado:", text);
-
-              if (text.includes('ingresar') || text.includes('login') || text.includes('entrar')) {
-                submitButton = btn;
-                console.log("✓ Botón de envío encontrado");
-                break;
-              }
-            }
-
-            if (submitButton) {
-              console.log("Presionando botón Ingresar...");
-              submitButton.click();
-              console.log("✓ Botón presionado - Iniciando sesión...");
-            } else {
-              console.error("✗ No se encontró botón de envío");
-              console.log("Botones disponibles:", Array.from(buttons).map(b => b.textContent.trim()));
-            }
-
-            console.log("=== SCRIPT DE LOGIN COMPLETADO ===");
           } catch (e) {
-            console.error("ERROR EN SCRIPT DE LOGIN:", e);
+            console.error("ERROR:", e);
           }
-        })().then ? await (function() {
-          try {
-            return (async function() {
-              await new Promise(r => setTimeout(r, 100));
-            })();
-          } catch (e) {
-            console.error("Error en async:", e);
-          }
-        })() : void 0;
+        })();
       `;
 
       try {
         // Ejecuta el script en la ventana
-        (function executeInWindow() {
-          const script = newWindow.document.createElement('script');
-          script.textContent = loginScript.replace(/await/g, '');
-          newWindow.document.head.appendChild(script);
-        })();
+        const script = newWindow.document.createElement('script');
+        script.textContent = loginScript;
+        newWindow.document.body.appendChild(script);
 
-        toast.success("✓ Login iniciado. Espera a que se complete...");
+        toast.success("✓ Login iniciado. Deberías estar en el Home de Tai Loy en segundos...");
       } catch (e) {
         console.error("Error inyectando script:", e);
-        toast.warning("No se pudo inyectar el script. Abre DevTools (F12) para ver detalles");
+        toast.error("No se pudo inyectar el script automáticamente. Completa el login manualmente.");
       }
 
     } catch (error: any) {
-      console.error("Error en automatización Tai Loy:", error);
+      console.error("Error:", error);
       toast.error(`Error: ${error.message}`);
     } finally {
       setIsProcessing(false);
