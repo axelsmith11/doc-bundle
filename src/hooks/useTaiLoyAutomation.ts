@@ -86,7 +86,7 @@ export const useTaiLoyAutomation = () => {
       `;
 
       try {
-        newWindow.eval(loginScript);
+        (newWindow as any).eval(loginScript);
       } catch (e) {
         console.error("Error inyectando script:", e);
         toast.warning("No se pudo automatizar el login. Completa manualmente.");
@@ -159,7 +159,7 @@ export const useTaiLoyAutomation = () => {
       `;
 
       try {
-        newWindow.eval(citaScript);
+        (newWindow as any).eval(citaScript);
         toast.success("Formulario llenado automáticamente. Sube el Excel y confirma.");
       } catch (e) {
         console.error("Error inyectando script de cita:", e);
