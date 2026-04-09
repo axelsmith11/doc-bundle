@@ -416,7 +416,7 @@ export default function CitaEditor() {
   }, [fecha, rows, processing]);
 
   // ─── Enviar a Tai Loy (Automatización via servicio Puppeteer) ───
-  const TAILOY_SERVICE = "https://doc-bundle-production.up.railway.app";
+  const TAILOY_SERVICE = "https://tai-loy-automation.onrender.com";
 
   const handleEnviarTaiLoy = useCallback(async () => {
     if (!user) { toast.error("No hay usuario autenticado"); return; }
