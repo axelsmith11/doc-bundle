@@ -416,40 +416,46 @@ export default function CitaEditor() {
   }, [fecha, rows, processing]);
 
   // ─── Enviar a Tai Loy (Automatización via servicio Puppeteer) ───
-  const TAILOY_SERVICE = "https://tai-loy-automation.onrender.com";
+  const TAILOY_SERVICE = "http://localhost:3001";
 
   const handleEnviarTaiLoy = useCallback(async () => {
     if (!user) { toast.error("No hay usuario autenticado"); return; }
+    if (!fecha) { toast.error("Selecciona la fecha de despacho"); return; }
 
     setIsAutomating(true);
     try {
-      toast.info("Conectando con servicio de automatización...");
+      toast.info("Generando Excel y conectando con Tai Loy...");
 
+      // Generar Excel en base64
+      const buf = await buildExcelBuffer(rows);
+      const uint8 = new Uint8Array(buf as ArrayBuffer);
+      let binary = "";
+      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+      const excelBase64 = btoa(binary);
+      const excelFileName = `OCs_${citaName || Date.now()}.xlsx`;
+
+      const fechaStr = format(fecha, "dd/MM/yyyy");
       const res = await fetch(`${TAILOY_SERVICE}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ fecha: fechaStr, hora: horaEntrega, excelBase64, excelFileName }),
       });
 
       const data = await res.json();
 
       if (data.success) {
-        toast.success("Login exitoso en Tai Loy");
+        toast.success("Cita creada en Tai Loy exitosamente");
       } else {
-        toast.error(data.error || "Error al iniciar sesión en Tai Loy");
+        toast.error(data.error || "Error al crear cita en Tai Loy");
       }
 
     } catch (e: any) {
-      console.error(e);
-      if (e.message?.includes("Failed to fetch")) {
-        toast.error("No se pudo conectar al servicio de automatización");
-      } else {
-        toast.error(`Error: ${e.message || "Error desconocido"}`);
-      }
+      console.error("TaiLoy error:", e);
+      toast.error(`Error: ${e.message || "Error desconocido"}`);
     } finally {
       setIsAutomating(false);
     }
-  }, [user, TAILOY_SERVICE]);
+  }, [user, fecha, horaEntrega, TAILOY_SERVICE]);
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
