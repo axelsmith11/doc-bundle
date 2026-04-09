@@ -1,5 +1,6 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 const cors = require('cors');
 require('dotenv').config();
 
@@ -38,9 +39,10 @@ app.get('/health', (_req, res) => {
  */
 async function loginTaiLoy(username, password) {
   const browser = await puppeteer.launch({
-    headless: 'new',
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath(),
+    args: chromium.args,
+    headless: chromium.headless,
+    defaultViewport: chromium.defaultViewport,
   });
 
   const page = await browser.newPage();
