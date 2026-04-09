@@ -415,56 +415,41 @@ export default function CitaEditor() {
     }
   }, [fecha, rows, processing]);
 
-  // ─── Enviar a Tai Loy (Automatización) ───
+  // ─── Enviar a Tai Loy (Automatización via servicio Puppeteer) ───
+  const TAILOY_SERVICE = import.meta.env.VITE_TAILOY_SERVICE_URL || "http://localhost:3000";
+
   const handleEnviarTaiLoy = useCallback(async () => {
-    if (!rows.length) { toast.error("No hay ítems para generar la cita"); return; }
-    if (!fecha) { toast.error("Selecciona la fecha de despacho"); return; }
     if (!user) { toast.error("No hay usuario autenticado"); return; }
 
     setIsAutomating(true);
     try {
-      const buf = await buildExcelBuffer(rows);
-      const uint8 = new Uint8Array(buf as ArrayBuffer);
-      let binary = "";
-      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
-      const excelBase64 = btoa(binary);
-      const excelFileName = `OCs_${citaName || Date.now()}.xlsx`;
+      toast.info("Conectando con servicio de automatización...");
 
-      toast.info("Iniciando automatización en Tai Loy...");
-
-      // Call Supabase Edge Function
-      const { data, error } = await supabase.functions.invoke("trigger-tai-loy-cita", {
-        body: {
-          excelBase64,
-          excelFileName,
-          fechaDespacho: format(fecha, "yyyy-MM-dd"),
-          horaEntrega,
-        },
+      const res = await fetch(`${TAILOY_SERVICE}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
       });
 
-      if (error) {
-        console.error("Edge Function error:", error);
-        toast.error(`Error: ${error.message || "No se pudo registrar la cita"}`);
-        return;
-      }
+      const data = await res.json();
 
-      if (data?.success) {
-        toast.success("✓ Cita registrada en Tai Loy automáticamente");
-        // Optionally redirect or clear form
-        setTimeout(() => {
-          navigate("/");
-        }, 2000);
+      if (data.success) {
+        toast.success("Login exitoso en Tai Loy");
       } else {
-        toast.error(data?.error || "Error desconocido al registrar la cita");
+        toast.error(data.error || "Error al iniciar sesión en Tai Loy");
       }
 
     } catch (e: any) {
       console.error(e);
-      toast.error(`Error: ${e.message || "Error desconocido"}`);
+      if (e.message?.includes("Failed to fetch")) {
+        toast.error("No se pudo conectar al servicio de automatización");
+      } else {
+        toast.error(`Error: ${e.message || "Error desconocido"}`);
+      }
     } finally {
       setIsAutomating(false);
     }
-  }, [rows, fecha, citaName, horaEntrega, user, navigate]);
+  }, [user, TAILOY_SERVICE]);
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
